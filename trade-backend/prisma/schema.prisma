@@ -1,0 +1,512 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String               @id @default(cuid())
+  email           String               @unique
+  password        String
+  fullName        String
+  birthDate       DateTime?            @db.Date
+  tcKimlikNo      String               @unique @db.VarChar(11)
+  phone           String               @db.VarChar(10)
+  referenceNumber String?
+  emailVerified      Boolean           @default(false)
+  emailVerifiedAt    DateTime?
+  phoneVerified      Boolean           @default(false)
+  phoneVerifiedAt    DateTime?
+  identityVerified   Boolean           @default(false)
+  identityVerifiedAt DateTime?
+  idCardFrontPath    String?           @db.VarChar(512)
+  idCardBackPath     String?           @db.VarChar(512)
+  selfiePath         String?           @db.VarChar(512)
+  totpSecret              String?           @db.VarChar(128)
+  totpSetupSecret         String?           @db.VarChar(128)
+  totpEnabled             Boolean           @default(false)
+  twoFactorOfferDismissed Boolean           @default(false)
+  createdAt       DateTime             @default(now())
+  accounts        TradingAccount[]
+  roles           UserRoleAssignment[]
+  memberships     BusinessMembership[]
+  businessStaff   BusinessStaff[]
+  positionsOpenedBy    Position[]    @relation("PositionOpenedBy")
+  pendingOrdersOpenedBy PendingOrder[] @relation("PendingOrderOpenedBy")
+  tradesOpenedBy       Trade[]       @relation("TradeOpenedBy")
+  notificationReads    PanelNotificationRead[]
+  financeRequests      FinanceRequest[]
+  financeProcessed     FinanceRequest[]      @relation("FinanceProcessedBy")
+  creditRequests       CreditRequest[]
+  creditProcessed      CreditRequest[]       @relation("CreditProcessedBy")
+  bonusRequests        BonusRequest[]
+  bonusProcessed       BonusRequest[]        @relation("BonusProcessedBy")
+  memberTradingSettings MemberTradingSettings[]
+  verificationCodes     VerificationCode[]
+  verificationPolicy    MemberVerificationPolicy[]
+  memberTwoFactorSettings MemberTwoFactorSettings[]
+  memberVerificationStatus MemberVerificationStatus[]
+}
+
+model Business {
+  id                        String                    @id @default(cuid())
+  name                      String                    @unique
+  displayName               String
+  slug                      String?                   @unique
+  isActive                  Boolean                   @default(true)
+  createdAt                 DateTime                  @default(now())
+  memberships               BusinessMembership[]
+  staff                     BusinessStaff[]
+  registrationsViaBusiness  BusinessMembership[]      @relation("RegistrationSource")
+  tradingSettings           BusinessTradingSettings?
+  verificationSettings      BusinessVerificationSettings?
+  memberTradingSettings     MemberTradingSettings[]
+  banks                     Bank[]
+  depositBankAccounts       DepositBankAccount[]
+  roles                     Role[]
+  notifications             PanelNotification[]
+  tradingAccounts           TradingAccount[]
+  financeRequests           FinanceRequest[]
+  creditRequests            CreditRequest[]
+  bonusRequests             BonusRequest[]
+  memberVerificationPolicies MemberVerificationPolicy[]
+  memberTwoFactorSettings    MemberTwoFactorSettings[]
+  memberVerificationStatuses MemberVerificationStatus[]
+  verificationCodes          VerificationCode[]
+}
+
+model BusinessTradingSettings {
+  id         String   @id @default(cuid())
+  businessId String   @unique
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  config     Json
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+}
+
+model MemberTradingSettings {
+  id         String   @id @default(cuid())
+  userId     String
+  businessId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  overrides  Json
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+  @@index([userId])
+}
+
+model BusinessMembership {
+  id                        String          @id @default(cuid())
+  userId                    String
+  businessId                String
+  registeredViaBusinessId   String?
+  registeredViaApp          String?
+  joinedAt                  DateTime        @default(now())
+  user                      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business                  Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  registeredViaBusiness     Business?       @relation("RegistrationSource", fields: [registeredViaBusinessId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+  @@index([userId])
+}
+
+model BusinessStaff {
+  userId     String
+  businessId String
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@id([userId, businessId])
+  @@index([businessId])
+}
+
+model Role {
+  id          String               @id @default(cuid())
+  businessId  String?
+  business    Business?            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  displayName String
+  description String?
+  isActive    Boolean              @default(true)
+  isHidden    Boolean              @default(false)
+  isSystem    Boolean              @default(false)
+  createdAt   DateTime             @default(now())
+  users       UserRoleAssignment[]
+  permissions RolePermission[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  displayName String
+  description String?
+  adminOnly   Boolean          @default(false)
+  roles       RolePermission[]
+}
+
+model UserRoleAssignment {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model TradingAccount {
+  id            String         @id @default(cuid())
+  userId        String
+  businessId    String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  balance       Decimal        @default(0) @db.Decimal(18, 4)
+  createdAt     DateTime       @default(now())
+  positions     Position[]
+  pendingOrders PendingOrder[]
+  trades        Trade[]
+  financeRequests FinanceRequest[]
+  bonusRequests   BonusRequest[]
+
+  @@unique([userId, businessId])
+  @@index([userId])
+  @@index([businessId])
+}
+
+model TransactionDisplayIdSequence {
+  id     String @id @default("global")
+  nextId Int    @default(100000001)
+}
+
+model Position {
+  id             String         @id @default(cuid())
+  displayId      Int?           @unique
+  accountId      String
+  account        TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  symbol         String
+  side           String
+  quantity       Decimal        @db.Decimal(18, 4)
+  avgEntry       Decimal        @db.Decimal(18, 8)
+  stopLoss       Decimal?       @db.Decimal(18, 8)
+  takeProfit     Decimal?       @db.Decimal(18, 8)
+  openedAt       DateTime       @default(now())
+  openedByUserId String?
+  openedBy       User?          @relation("PositionOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([accountId, symbol])
+  @@index([openedByUserId])
+}
+
+model PendingOrder {
+  id             String         @id
+  displayId      Int?           @unique
+  accountId      String
+  account        TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  symbol         String
+  side           String
+  quantity       Decimal        @db.Decimal(18, 4)
+  limitPrice     Decimal        @db.Decimal(18, 8)
+  stopLoss       Decimal?       @db.Decimal(18, 8)
+  takeProfit     Decimal?       @db.Decimal(18, 8)
+  createdAt      DateTime       @default(now())
+  openedByUserId String?
+  openedBy       User?          @relation("PendingOrderOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([openedByUserId])
+}
+
+model Trade {
+  id             String         @id
+  displayId      Int?           @unique
+  accountId      String
+  account        TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  symbol         String
+  side           String
+  quantity       Decimal        @db.Decimal(18, 4)
+  price          Decimal        @db.Decimal(18, 8)
+  realizedPnl    Decimal        @default(0) @db.Decimal(18, 4)
+  note           String?
+  executedAt     DateTime       @default(now())
+  openedByUserId String?
+  openedBy       User?          @relation("TradeOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, executedAt])
+  @@index([openedByUserId])
+}
+
+model PanelNotification {
+  id         String                  @id @default(cuid())
+  businessId String?
+  business   Business?               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  message    String                  @db.Text
+  href       String?
+  data       Json?
+  createdAt  DateTime                @default(now())
+  reads      PanelNotificationRead[]
+
+  @@index([createdAt])
+  @@index([businessId])
+}
+
+model PanelNotificationRead {
+  notificationId String
+  userId         String
+  readAt         DateTime          @default(now())
+  notification   PanelNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId])
+}
+
+model Bank {
+  id              String               @id @default(cuid())
+  businessId      String
+  business        Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name            String               @db.VarChar(120)
+  logoPath        String               @db.VarChar(512)
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  depositAccounts DepositBankAccount[]
+  financeRequests FinanceRequest[]
+
+  @@unique([businessId, name])
+  @@index([isActive])
+  @@index([businessId])
+}
+
+model DepositBankAccount {
+  id                String           @id @default(cuid())
+  businessId        String
+  business          Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  bankId            String
+  bank              Bank             @relation(fields: [bankId], references: [id], onDelete: Restrict)
+  accountHolderName String           @db.VarChar(120)
+  iban              String           @db.VarChar(34)
+  description       String?          @db.Text
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  financeRequests   FinanceRequest[]
+
+  @@index([isActive])
+  @@index([bankId])
+  @@index([businessId])
+}
+
+model PlatformSettings {
+  id                           String   @id @default("default")
+  verificationEnabled          Boolean  @default(true)
+  emailVerificationEnabled     Boolean  @default(true)
+  smsVerificationEnabled       Boolean  @default(false)
+  identityVerificationRequired Boolean  @default(true)
+  twoFactorEnabled             Boolean  @default(false)
+  updatedAt                    DateTime @updatedAt
+}
+
+model BusinessVerificationSettings {
+  id                           String   @id @default(cuid())
+  businessId                   String   @unique
+  business                     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  verificationEnabled          Boolean  @default(true)
+  emailVerificationEnabled     Boolean  @default(true)
+  smsVerificationEnabled       Boolean  @default(false)
+  identityVerificationRequired Boolean  @default(true)
+  twoFactorRequired            Boolean  @default(false)
+  updatedAt                    DateTime @updatedAt
+  createdAt                    DateTime @default(now())
+}
+
+model MemberVerificationPolicy {
+  id                         String   @id @default(cuid())
+  userId                     String
+  businessId                 String
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business                   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  verificationExempt         Boolean  @default(false)
+  skipEmailVerification      Boolean  @default(false)
+  skipSmsVerification        Boolean  @default(false)
+  skipIdentityVerification   Boolean  @default(false)
+  twoFactorExempt            Boolean  @default(false)
+  skipTwoFactor              Boolean  @default(false)
+  updatedAt                  DateTime @updatedAt
+  createdAt                  DateTime @default(now())
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+  @@index([userId])
+}
+
+model MemberTwoFactorSettings {
+  userId                    String
+  businessId                String
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business                  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  totpSecret                String?  @db.VarChar(128)
+  totpSetupSecret           String?  @db.VarChar(128)
+  totpEnabled               Boolean  @default(false)
+  twoFactorOfferDismissed   Boolean  @default(false)
+  updatedAt                 DateTime @updatedAt
+  createdAt                 DateTime @default(now())
+
+  @@id([userId, businessId])
+  @@index([businessId])
+}
+
+model MemberVerificationStatus {
+  userId               String
+  businessId           String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business             Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  emailVerified        Boolean  @default(false)
+  emailVerifiedAt      DateTime?
+  phoneVerified        Boolean  @default(false)
+  phoneVerifiedAt      DateTime?
+  identityVerified     Boolean  @default(false)
+  identityVerifiedAt   DateTime?
+  identityDocType      String?  @db.VarChar(20)
+  idCardFrontPath      String?  @db.VarChar(512)
+  idCardBackPath       String?  @db.VarChar(512)
+  licenseFrontPath     String?  @db.VarChar(512)
+  licenseBackPath      String?  @db.VarChar(512)
+  passportFrontPath    String?  @db.VarChar(512)
+  selfiePath           String?  @db.VarChar(512)
+  updatedAt            DateTime @updatedAt
+  createdAt            DateTime @default(now())
+
+  @@id([userId, businessId])
+  @@index([businessId])
+}
+
+model VerificationCode {
+  id         String    @id @default(cuid())
+  userId     String
+  businessId String?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  type       String
+  code       String    @db.VarChar(6)
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, type])
+  @@index([userId, businessId, type])
+  @@index([expiresAt])
+}
+
+model FinanceRequest {
+  id                String         @id @default(cuid())
+  displayId         Int?           @unique
+  businessId        String
+  business          Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type              String
+  status            String         @default("pending")
+  amount            Decimal        @db.Decimal(18, 4)
+  iban              String?        @db.VarChar(34)
+  bankId            String?
+  bank              Bank?          @relation(fields: [bankId], references: [id], onDelete: SetNull)
+  bankCode          String?        @db.VarChar(32)
+  accountHolderName String?        @db.VarChar(120)
+  depositBankAccountId String?
+  depositBankAccount   DepositBankAccount? @relation(fields: [depositBankAccountId], references: [id], onDelete: SetNull)
+  receiptPath       String?        @db.VarChar(512)
+  description       String?        @db.Text
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  processedAt       DateTime?
+  processedByUserId String?
+  processedBy       User?          @relation("FinanceProcessedBy", fields: [processedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([businessId])
+  @@index([type, status])
+  @@index([createdAt])
+  @@index([accountId])
+  @@index([depositBankAccountId])
+  @@index([bankId])
+}
+
+model CreditRequest {
+  id                 String    @id @default(cuid())
+  displayId          Int?      @unique
+  businessId         String
+  business           Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status             String    @default("pending")
+  amount             Decimal   @default(0) @db.Decimal(18, 4)
+  description        String?   @db.Text
+  contractPath       String?   @db.VarChar(512)
+  contractUploadedAt DateTime?
+  signedContractPath String?   @db.VarChar(512)
+  signedUploadedAt   DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  processedAt        DateTime?
+  processedByUserId  String?
+  processedBy        User?     @relation("CreditProcessedBy", fields: [processedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([businessId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model BonusRequest {
+  id                String         @id @default(cuid())
+  displayId         Int?           @unique
+  businessId        String
+  business          Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  status            String         @default("pending")
+  amount            Decimal        @default(0) @db.Decimal(18, 4)
+  description       String?        @db.Text
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  processedAt       DateTime?
+  processedByUserId String?
+  processedBy       User?          @relation("BonusProcessedBy", fields: [processedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([businessId])
+  @@index([accountId])
+  @@index([status])
+  @@index([createdAt])
+}
+
