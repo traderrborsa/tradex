@@ -207,9 +207,12 @@ async function main() {
   }
 
   const adminEmail = (
-    process.env.PANEL_ADMIN_EMAIL ?? 'admin@tradex.local'
+    process.env.PANEL_ADMIN_EMAIL ?? 'matayurt01@gmail.com'
   ).toLowerCase();
-  const adminPassword = process.env.PANEL_ADMIN_PASSWORD ?? 'admin123';
+  const adminPassword = process.env.PANEL_ADMIN_PASSWORD ?? 'Mehmet123';
+  const adminFullName = process.env.PANEL_ADMIN_NAME ?? 'Mehmet';
+  const adminTcKimlik = process.env.PANEL_ADMIN_TC ?? '60412347019';
+  const adminPhone = process.env.PANEL_ADMIN_PHONE ?? '5550000002';
   const adminRole = await prisma.role.findFirst({
     where: { name: 'admin', businessId: null },
   });
@@ -274,9 +277,9 @@ async function main() {
       data: {
         email: adminEmail,
         password: hash,
-        fullName: 'Panel Yöneticisi',
-        tcKimlikNo: '60412347018',
-        phone: '5550000001',
+        fullName: adminFullName,
+        tcKimlikNo: adminTcKimlik,
+        phone: adminPhone,
         accounts: {
           create: { businessId: tradexBusiness.id, balance: 10000 },
         },
@@ -284,6 +287,14 @@ async function main() {
     });
     console.log(`Admin kullanıcı oluşturuldu: ${adminEmail}`);
   } else {
+    const hash = await bcrypt.hash(adminPassword, 10);
+    adminUser = await prisma.user.update({
+      where: { id: adminUser.id },
+      data: {
+        password: hash,
+        fullName: adminFullName,
+      },
+    });
     await prisma.tradingAccount.upsert({
       where: {
         userId_businessId: {
@@ -300,6 +311,20 @@ async function main() {
     });
   }
 
+  await prisma.businessStaff.upsert({
+    where: {
+      userId_businessId: {
+        userId: adminUser.id,
+        businessId: tradexBusiness.id,
+      },
+    },
+    create: {
+      userId: adminUser.id,
+      businessId: tradexBusiness.id,
+    },
+    update: {},
+  });
+
   await prisma.userRoleAssignment.upsert({
     where: {
       userId_roleId: { userId: adminUser.id, roleId: adminRole.id },
@@ -310,7 +335,7 @@ async function main() {
 
   console.log('RBAC seed tamamlandı.');
   console.log(`Panel giriş: ${adminEmail} / ${adminPassword}`);
-  console.log(`TRADEX işletme ID: ${tradexBusiness.id}`);
+  console.log(`TRADEX işletme: tradex (${tradexBusiness.id})`);
   console.log(`TRADEX Pro işletme ID: ${tradexProBusiness.id}`);
   console.log(`trade-front .env: NEXT_PUBLIC_BUSINESS_ID=${tradexBusiness.id}`);
   console.log(
