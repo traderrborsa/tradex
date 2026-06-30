@@ -5,8 +5,9 @@
     "resolvePackageJsonExports": true,
 
     "baseUrl": "./src",
+
     "paths": {
-      "@uploads/*": ["uploads/*"]
+      "uploads/*": ["uploads/*"]
     },
 
     "esModuleInterop": true,
