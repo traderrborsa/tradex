@@ -11,7 +11,15 @@ export type IdentityDocumentKind =
   | 'passport-front'
   | 'selfie';
 
-export type UploadedFilePayload = Express.Multer.File;
+/** Multer memoryStorage() çıktısı — @types/multer bağımlılığı olmadan. */
+export interface UploadedFilePayload {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+}
 
 type CreditContractKind = 'contract' | 'signed';
 
