@@ -207,7 +207,7 @@ async function main() {
   }
 
   const adminEmail = (
-    process.env.PANEL_ADMIN_EMAIL ?? 'matayurt01@gmail.com'
+    process.env.PANEL_ADMIN_EMAIL ?? 'admin@gmail.com'
   ).toLowerCase();
   const adminPassword = process.env.PANEL_ADMIN_PASSWORD ?? 'Mehmet123';
   const adminFullName = process.env.PANEL_ADMIN_NAME ?? 'Mehmet';
