@@ -4,7 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module';
 import { CORS_ORIGINS } from './cors-origins';
-import { configureStaticUploads } from './uploads/static-uploads';
+import { configureStaticUploads } from './uploads/static-uploads.js';
 
 const WS_PATHS = [
   '/ws/ticks',
