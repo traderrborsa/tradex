@@ -21,22 +21,50 @@ const WS_PATHS = [
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
   configureStaticUploads(app);
   app.useWebSocketAdapter(new WsAdapter(app));
+
+  const corsOrigins = (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: CORS_ORIGINS,
+    origin: (origin, callback) => {
+      // SSR / curl / server-to-server requests
+      if (!origin) return callback(null, true);
+
+      // DEV fallback (boşsa her şeyi aç)
+      if (corsOrigins.length === 0) {
+        return callback(null, true);
+      }
+
+      // allowlist kontrolü
+      if (corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(null, false);
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
+
   app.setGlobalPrefix('api');
+
   const port = process.env.PORT ?? 3001;
-  const publicBase =
-    process.env.API_PUBLIC_URL?.replace(/\/$/, '') ??
-    `http://localhost:${port}`;
-  const wsBase = publicBase.replace(/^http/, 'ws');
+
   await app.listen(port);
-  console.log(`HTTP  ${publicBase}/api`);
-  for (const path of WS_PATHS) {
-    console.log(`WS    ${wsBase}${path}`);
-  }
+
+  console.log(`HTTP  http://localhost:${port}/api`);
+  console.log(`WS    ws://localhost:${port}/ws/ticks`);
+  console.log(`WS    ws://localhost:${port}/ws/verification`);
+  console.log(`WS    ws://localhost:${port}/ws/panel/verification`);
+  console.log(`WS    ws://localhost:${port}/ws/portfolio`);
 }
+
 bootstrap();
