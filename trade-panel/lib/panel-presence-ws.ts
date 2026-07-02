@@ -1,10 +1,8 @@
+import { resolveWsUrl } from './ws-url';
+
 type PresenceHandler = () => void;
 
 type ServerMessage = { type: 'connected' } | { type: 'presence_changed' };
-
-const WS_URL =
-  process.env.NEXT_PUBLIC_PANEL_PRESENCE_WS_URL ??
-  'ws://localhost:3001/ws/panel/presence';
 
 let socket: WebSocket | null = null;
 let connectPromise: Promise<WebSocket> | null = null;
@@ -13,11 +11,10 @@ const handlers = new Set<PresenceHandler>();
 let refCount = 0;
 
 function getWsUrl() {
-  if (typeof window === 'undefined') return WS_URL;
-  const env = process.env.NEXT_PUBLIC_PANEL_PRESENCE_WS_URL;
-  if (env) return env;
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:3001/ws/panel/presence`;
+  return resolveWsUrl(
+    '/ws/panel/presence',
+    process.env.NEXT_PUBLIC_PANEL_PRESENCE_WS_URL,
+  );
 }
 
 function dispatchPresenceChanged() {

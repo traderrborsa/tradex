@@ -91,7 +91,10 @@ export function TransactionEditSheet({
   const [takeProfit, setTakeProfit] = useState('');
   const [dateTime, setDateTime] = useState('');
   const [realizedPnl, setRealizedPnl] = useState('');
-  const [note, setNote] = useState('');
+  const [buyPrice, setBuyPrice] = useState('');
+  const [sellPrice, setSellPrice] = useState('');
+  const [buyAt, setBuyAt] = useState('');
+  const [sellAt, setSellAt] = useState('');
 
   const sym = symbol.trim().toUpperCase();
   const { ticks } = useMarketTicks(
@@ -160,7 +163,14 @@ export function TransactionEditSheet({
           setQuantity(String(data.quantity));
           setOpenPrice(String(data.price));
           setRealizedPnl(String(data.realizedPnl));
-          setNote(data.note ?? '');
+          setBuyPrice(
+            data.buyPrice != null ? String(data.buyPrice) : '',
+          );
+          setSellPrice(
+            data.sellPrice != null ? String(data.sellPrice) : '',
+          );
+          setBuyAt(data.buyAt ?? '');
+          setSellAt(data.sellAt ?? '');
           setDateTime(toLocalInput(data.executedAt));
         }
       })
@@ -209,7 +219,6 @@ export function TransactionEditSheet({
           quantity: Number(quantity),
           price: Number(openPrice),
           realizedPnl: Number(realizedPnl),
-          note: note.trim() || null,
           executedAt: new Date(dateTime).toISOString(),
         });
       }
@@ -526,13 +535,30 @@ export function TransactionEditSheet({
                   </div>
                   <div className="sm:col-span-2">
                     <label className="mb-1 block text-xs text-zinc-500">
-                      Not
+                      Alış Fiyatı − Satış Fiyatı
                     </label>
                     <input
-                      className={canWrite ? FIELD_EDIT : FIELD}
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      readOnly={!canWrite}
+                      className={FIELD}
+                      value={
+                        buyPrice && sellPrice
+                          ? `${formatTradingPrice(Number(buyPrice), sym)} − ${formatTradingPrice(Number(sellPrice), sym)}`
+                          : '—'
+                      }
+                      readOnly
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs text-zinc-500">
+                      Alış Tarihi − Satış Tarihi
+                    </label>
+                    <input
+                      className={FIELD}
+                      value={
+                        buyAt && sellAt
+                          ? `${formatDateTime(buyAt)} − ${formatDateTime(sellAt)}`
+                          : '—'
+                      }
+                      readOnly
                     />
                   </div>
                 </div>

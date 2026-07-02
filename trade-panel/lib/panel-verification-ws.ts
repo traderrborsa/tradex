@@ -1,3 +1,5 @@
+import { resolveWsUrl } from './ws-url';
+
 export type PanelVerificationChange = 'documents' | 'email' | 'phone' | 'identity';
 
 export type PanelVerificationChangedMessage = {
@@ -13,10 +15,6 @@ type ServerMessage =
   | { type: 'connected' }
   | PanelVerificationChangedMessage;
 
-const WS_URL =
-  process.env.NEXT_PUBLIC_PANEL_VERIFICATION_WS_URL ??
-  'ws://localhost:3001/ws/panel/verification';
-
 let socket: WebSocket | null = null;
 let connectPromise: Promise<WebSocket> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -24,11 +22,10 @@ const handlers = new Set<RefreshHandler>();
 let refCount = 0;
 
 function getWsUrl() {
-  if (typeof window === 'undefined') return WS_URL;
-  const env = process.env.NEXT_PUBLIC_PANEL_VERIFICATION_WS_URL;
-  if (env) return env;
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:3001/ws/panel/verification`;
+  return resolveWsUrl(
+    '/ws/panel/verification',
+    process.env.NEXT_PUBLIC_PANEL_VERIFICATION_WS_URL,
+  );
 }
 
 function dispatch(msg: PanelVerificationChangedMessage) {

@@ -389,3 +389,8 @@ Güvenlik açığı bildirimi için proje sorumlusuna doğrudan ulaşın. Public
 ---
 
 *Bu belge otomatik güvenlik taraması sonucu oluşturulmuştur. Düzeltmeler uygulandıkça ilgili maddeleri güncelleyin.*
+
+
+
+DATABASE_URL="postgresql://postgres:Tradex123321!@localhost:5432/trading?schema=public"
+JWT_SECRET="bc8c9ab1b94284be4a4116c758e5c2b2de14a9b1fa5059fa71b5bad673aebb6f0db04d1701ccf0fb"

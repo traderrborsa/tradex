@@ -17,3 +17,24 @@ export function tradeGrossPnl(trade: Trade): number | null {
   if (!isCloseTrade(trade)) return null;
   return trade.grossPnl ?? trade.realizedPnl;
 }
+
+/** BIST hisselerinde 1:1 kaldıraçta gösterilecek fiyat değişim yüzdesi. */
+export function tradeBistPriceChangePct(trade: Trade): number | null {
+  if (
+    trade.buyPrice == null ||
+    trade.sellPrice == null ||
+    trade.buyPrice <= 0
+  ) {
+    return null;
+  }
+  return ((trade.sellPrice - trade.buyPrice) / trade.buyPrice) * 100;
+}
+
+export function hasTradeLegs(trade: Trade): boolean {
+  return (
+    trade.buyPrice != null &&
+    trade.sellPrice != null &&
+    trade.buyAt != null &&
+    trade.sellAt != null
+  );
+}

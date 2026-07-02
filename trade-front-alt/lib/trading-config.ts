@@ -1,6 +1,7 @@
 export interface EffectiveTradingSettings {
   commissionRate: number;
-  leverage: number;
+  leverageOptions: number[];
+  fixedLeverage: number | null;
   minLot: number;
   maxLot: number | null;
   lotStep: number;
@@ -14,7 +15,8 @@ export interface EffectiveTradingSettings {
 
 export const DEFAULT_TRADING_SETTINGS: EffectiveTradingSettings = {
   commissionRate: 0.0002,
-  leverage: 1,
+  leverageOptions: [1],
+  fixedLeverage: null,
   minLot: 0.01,
   maxLot: null,
   lotStep: 0.01,
@@ -28,8 +30,18 @@ export const DEFAULT_TRADING_SETTINGS: EffectiveTradingSettings = {
 
 export interface TradingConfigBundle {
   defaults: EffectiveTradingSettings;
-  business: Partial<EffectiveTradingSettings>;
-  member: Partial<EffectiveTradingSettings>;
+  business: Partial<EffectiveTradingSettings> & { leverageOptions?: number[] };
+  member: Partial<EffectiveTradingSettings> & { leverage?: number };
   effective: EffectiveTradingSettings;
   hasMemberOverrides: boolean;
+}
+
+export function activeLeverage(
+  settings: EffectiveTradingSettings,
+  selected?: number,
+): number {
+  if (settings.fixedLeverage != null) return settings.fixedLeverage;
+  const fallback = settings.leverageOptions[0] ?? 1;
+  const lev = selected ?? fallback;
+  return settings.leverageOptions.includes(lev) ? lev : fallback;
 }

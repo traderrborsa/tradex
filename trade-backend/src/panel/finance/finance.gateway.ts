@@ -8,12 +8,11 @@ import {
 } from '@nestjs/websockets';
 import type { Server, WebSocket } from 'ws';
 import { FinanceEventsService } from './finance-events.service';
+import { CORS_ORIGINS } from '../../cors-origins';
 
 @WebSocketGateway({
   path: '/ws/panel/finance',
-  cors: {
-    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002',
-  },
+  cors: { origin: CORS_ORIGINS },
 })
 export class PanelFinanceGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit

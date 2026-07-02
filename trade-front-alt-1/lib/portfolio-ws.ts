@@ -1,5 +1,6 @@
 import { getToken } from './auth-storage';
 import { resolveActiveBusinessId } from './business';
+import { resolveWsUrlWithToken } from './ws-url';
 
 export type PortfolioUpdatedMessage = {
   type: 'portfolio_updated';
@@ -20,10 +21,6 @@ type ServerMessage =
   | PortfolioUpdatedMessage
   | TradingConfigUpdatedMessage;
 
-const WS_URL =
-  process.env.NEXT_PUBLIC_PORTFOLIO_WS_URL ??
-  'ws://localhost:3001/ws/portfolio';
-
 let socket: WebSocket | null = null;
 let connectPromise: Promise<WebSocket> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -33,14 +30,11 @@ const listeners = new Set<(msg: PortfolioUpdatedMessage) => void>();
 const configListeners = new Set<(msg: TradingConfigUpdatedMessage) => void>();
 
 function getWsUrl(token: string) {
-  if (typeof window === 'undefined') return WS_URL;
-  const env = process.env.NEXT_PUBLIC_PORTFOLIO_WS_URL;
-  const base =
-    env ??
-    `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:3001/ws/portfolio`;
-  const url = new URL(base);
-  url.searchParams.set('token', token);
-  return url.toString();
+  return resolveWsUrlWithToken(
+    '/ws/portfolio',
+    token,
+    process.env.NEXT_PUBLIC_PORTFOLIO_WS_URL,
+  );
 }
 
 function dispatchPortfolio(msg: PortfolioUpdatedMessage) {

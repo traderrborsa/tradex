@@ -175,7 +175,10 @@ export interface PanelTransactionRow {
   netPnl?: number | null;
   currentPrice?: number | null;
   openedAt: string;
-  note?: string | null;
+  buyPrice?: number;
+  sellPrice?: number;
+  buyAt?: string;
+  sellAt?: string;
 }
 
 export interface PanelPositionDetail {
@@ -226,11 +229,14 @@ export interface PanelTradeDetail {
   quantity: number;
   price: number;
   realizedPnl: number;
-  note: string | null;
   executedAt: string;
   swap: number;
   commission: number;
   netPnl?: number;
+  buyPrice?: number;
+  sellPrice?: number;
+  buyAt?: string;
+  sellAt?: string;
 }
 
 export type PanelTransactionDetail =

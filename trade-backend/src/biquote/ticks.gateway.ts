@@ -10,6 +10,7 @@ import type { Server, WebSocket } from 'ws';
 import { BistService } from '../bist/bist.service';
 import { BistUpstreamService } from '../bist/bist-upstream.service';
 import { BiquoteUpstreamService } from './biquote-upstream.service';
+import { CORS_ORIGINS } from '../cors-origins';
 
 type ClientMessage =
   | { action: 'subscribe'; symbol: string }
@@ -18,9 +19,7 @@ type ClientMessage =
 
 @WebSocketGateway({
   path: '/ws/ticks',
-  cors: {
-    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002,http://localhost:4001,http://localhost:4002',
-  },
+  cors: { origin: CORS_ORIGINS },
 })
 export class TicksGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit

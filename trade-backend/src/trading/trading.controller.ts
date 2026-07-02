@@ -59,6 +59,7 @@ export class TradingController {
       ask: number;
       stopLoss?: number;
       takeProfit?: number;
+      leverage?: number;
       businessId?: string;
     },
   ) {
@@ -76,6 +77,7 @@ export class TradingController {
       limitPrice: number;
       stopLoss?: number;
       takeProfit?: number;
+      leverage?: number;
       businessId?: string;
     },
   ) {

@@ -5,9 +5,11 @@ import { TwoFactorModule } from '../two-factor/two-factor.module';
 import { FinanceModule } from '../finance/finance.module';
 import { CreditModule } from '../credit/credit.module';
 import { BonusModule } from '../bonus/bonus.module';
+import { CampaignModule } from '../campaign/campaign.module';
 import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { TradingModule } from '../trading/trading.module';
+import { MemberNotificationsModule } from '../member-notifications/member-notifications.module';
 import { PanelAuthController } from './auth/auth.controller';
 import { PanelBanksController } from './banks/banks.controller';
 import { PanelBanksService } from './banks/banks.service';
@@ -21,6 +23,7 @@ import { PanelPresenceController } from './presence/presence.controller';
 import { PanelFinanceController } from './finance/finance.controller';
 import { PanelCreditController } from './credit/credit.controller';
 import { PanelBonusController } from './bonus/bonus.controller';
+import { PanelCampaignController } from './campaign/campaign.controller';
 import { PanelMembersController } from './members/members.controller';
 import { PanelMembersService } from './members/members.service';
 import { PanelPermissionsController } from './permissions/permissions.controller';
@@ -40,9 +43,11 @@ import {
   PanelBusinessVerificationController,
   PanelVerificationSettingsController,
 } from './verification/verification.controller';
+import { PanelMemberNotificationsController } from './member-notifications/member-notifications.controller';
+import { PanelMemberNotificationsService } from './member-notifications/member-notifications.service';
 
 @Module({
-  imports: [AuthModule, RbacModule, TradingModule, FinanceModule, CreditModule, BonusModule, VerificationModule, UploadsModule, TwoFactorModule],
+  imports: [AuthModule, RbacModule, TradingModule, FinanceModule, CreditModule, BonusModule, CampaignModule, VerificationModule, UploadsModule, TwoFactorModule, MemberNotificationsModule],
   controllers: [
     PanelAuthController,
     PanelRolesController,
@@ -54,6 +59,7 @@ import {
     PanelFinanceController,
     PanelCreditController,
     PanelBonusController,
+    PanelCampaignController,
     PanelBankAccountsController,
     PanelBanksController,
     PanelTradingSettingsController,
@@ -63,6 +69,7 @@ import {
     PanelVerificationSettingsController,
     PanelBusinessVerificationController,
     PanelMemberVerificationController,
+    PanelMemberNotificationsController,
   ],
   providers: [
     PanelRolesService,
@@ -76,6 +83,7 @@ import {
     PanelTradingSettingsService,
     PanelWalletService,
     PanelDashboardService,
+    PanelMemberNotificationsService,
   ],
 })
 export class PanelModule {}

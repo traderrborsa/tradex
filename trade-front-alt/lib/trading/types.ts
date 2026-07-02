@@ -9,6 +9,7 @@ export interface Position {
   openedAt: string;
   stopLoss?: number;
   takeProfit?: number;
+  leverage?: number;
 }
 
 export interface PendingOrder {
@@ -19,6 +20,7 @@ export interface PendingOrder {
   limitPrice: number;
   stopLoss?: number;
   takeProfit?: number;
+  leverage?: number;
   createdAt: string;
 }
 
@@ -36,10 +38,20 @@ export interface Trade {
   swap?: number;
   netPnl?: number;
   balancePnl?: number;
+  buyPrice?: number;
+  sellPrice?: number;
+  buyAt?: string;
+  sellAt?: string;
 }
 
 export interface Portfolio {
   balance: number;
+  bonusIncome?: number;
+  creditIncome?: number;
+  cashBalance?: number;
+  totalBalance?: number;
+  currency?: string;
+  exchangeRates?: Record<string, number>;
   positions: Position[];
   pendingOrders: PendingOrder[];
   history: Trade[];

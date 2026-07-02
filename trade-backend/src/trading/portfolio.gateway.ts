@@ -12,18 +12,15 @@ import { MEMBER_ROLE_NAME } from '../rbac/permissions.constants';
 import { RbacService } from '../rbac/rbac.service';
 import { PortfolioConnectionService } from './portfolio-connection.service';
 import { PortfolioEventsService } from './portfolio-events.service';
+import { CORS_ORIGINS } from '../cors-origins';
 
 interface JwtPayload {
   sub: string;
 }
 
-const CORS_ORIGIN =
-  process.env.CORS_ORIGIN ??
-  'http://localhost:3000,http://localhost:3002,http://localhost:4001,http://localhost:4002';
-
 @WebSocketGateway({
   path: '/ws/portfolio',
-  cors: { origin: CORS_ORIGIN },
+  cors: { origin: CORS_ORIGINS },
 })
 export class PortfolioGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit

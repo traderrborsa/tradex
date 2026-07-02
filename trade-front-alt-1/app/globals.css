@@ -465,6 +465,10 @@ button:disabled {
   animation: ticker-scroll 30s linear infinite;
 }
 
+.ticker-scroll:hover {
+  animation-play-state: paused;
+}
+
 @keyframes shimmer {
   0% { opacity: 0.45; }
   50% { opacity: 1; }

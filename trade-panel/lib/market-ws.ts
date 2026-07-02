@@ -1,7 +1,5 @@
 import type { Tick } from './market-types';
-
-const WS_URL =
-  process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:3001/ws/ticks';
+import { resolveWsUrl } from './ws-url';
 
 type TickHandler = (tick: Tick) => void;
 
@@ -20,11 +18,7 @@ const handlersBySymbol = new Map<string, Set<TickHandler>>();
 const refCounts = new Map<string, number>();
 
 function getWsUrl() {
-  if (typeof window === 'undefined') return WS_URL;
-  const env = process.env.NEXT_PUBLIC_WS_URL;
-  if (env) return env;
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:3001/ws/ticks`;
+  return resolveWsUrl('/ws/ticks', process.env.NEXT_PUBLIC_WS_URL);
 }
 
 function activeSymbols(): string[] {

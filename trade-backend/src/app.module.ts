@@ -15,6 +15,7 @@ import { TradingModule } from './trading/trading.module';
 import { ProfileModule } from './profile/profile.module';
 import { VerificationModule } from './verification/verification.module';
 import { PresenceModule } from './presence/presence.module';
+import { MemberNotificationsModule } from './member-notifications/member-notifications.module';
 import { PublicModule } from './public/public.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { PublicModule } from './public/public.module';
     PanelModule,
     ProfileModule,
     VerificationModule,
+    MemberNotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

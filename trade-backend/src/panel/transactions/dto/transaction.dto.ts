@@ -26,7 +26,6 @@ export class UpdatePanelTradeDto {
   quantity?: number;
   price?: number;
   realizedPnl?: number;
-  note?: string | null;
   executedAt?: string;
   balance?: number;
 }

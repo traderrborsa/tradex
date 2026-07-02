@@ -11,10 +11,10 @@ import { CHART_INTERVALS } from '@/lib/types';
 import { useTrading } from '@/contexts/TradingContext';
 import { useLiveTick } from '@/hooks/useLiveTick';
 import { CandlestickChart } from './CandlestickChart';
-import { OpenPositionsBar } from './OpenPositionsBar';
+import { PositionsView } from './PositionsView';
 import { PriceHeader } from './PriceHeader';
 import { SkeletonChart } from './ui/Skeleton';
-import { MOBILE_NAV_PB, MOBILE_NAV_POSITIONS_PB } from '@/lib/layout';
+import { MOBILE_NAV_PB } from '@/lib/layout';
 
 interface Props {
   symbol: string;
@@ -83,14 +83,9 @@ export function SymbolChartView({ symbol }: Props) {
   }, [loadChart]);
 
   const livePrice = tick != null ? resolvePrice(tick) : undefined;
-  const hasPositions = portfolio.positions.length > 0;
 
   return (
-    <div
-      className={`flex min-h-screen flex-col bg-background ${
-        hasPositions ? MOBILE_NAV_POSITIONS_PB : MOBILE_NAV_PB
-      }`}
-    >
+    <div className={`flex min-h-screen flex-col bg-background ${MOBILE_NAV_PB}`}>
       <AppHeader showSearch searchQuery={sym} />
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-4 sm:px-6 sm:py-5">
@@ -162,11 +157,14 @@ export function SymbolChartView({ symbol }: Props) {
                 <TradePanel symbol={sym} tick={tick} />
               </div>
             </aside>
+
+            {/* Bu maldaki işlemlerim — sayfa altında, normal akışta */}
+            <div className="lg:col-span-2">
+              <PositionsView filterSymbol={sym} title="Bu maldaki işlemlerim" card />
+            </div>
           </div>
         )}
       </main>
-
-      {!error && <OpenPositionsBar activeSymbol={sym} />}
     </div>
   );
 }

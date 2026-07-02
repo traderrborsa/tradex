@@ -178,7 +178,7 @@ function DocumentUpload({
 
       {locked && currentUrl && (
         <p className="mt-2 text-xs text-emerald-400">
-          Evrak onaylandı — belge değiştirilemez
+          KYC onaylandı — belge değiştirilemez
         </p>
       )}
 
@@ -241,10 +241,13 @@ export function DocumentVerificationSection({
 
   return (
     <section className="rounded-2xl border border-border-strong bg-card p-6">
-      <h2 className="text-lg font-semibold text-foreground">Evrak doğrulama</h2>
+      <h2 className="text-lg font-semibold text-foreground">
+        KYC (Kimlik Onayı)
+      </h2>
       <p className="mt-1 text-sm text-muted">
-        T.C. kimlik, ehliyet veya pasaport belgelerinden birini yükleyin. Panel
-        onayından sonra işlem yapabilirsiniz; onay WebSocket ile anında bildirilir.
+        T.C. kimlik, ehliyet veya pasaport belgelerinden birini yükleyin. KYC
+        (Kimlik Onayı) tamamlandıktan sonra işlem yapabilirsiniz; onay anında
+        bildirilir.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -284,10 +287,10 @@ export function DocumentVerificationSection({
           ok={v.identityVerified}
           label={
             v.identityVerified
-              ? `Panel onayladı${v.identityDocType ? ` (${IDENTITY_DOC_TYPE_LABELS[v.identityDocType]})` : ''}`
+              ? `KYC onaylandı${v.identityDocType ? ` (${IDENTITY_DOC_TYPE_LABELS[v.identityDocType]})` : ''}`
               : activeSet?.pendingPanelReview ?? v.identityDocuments.pendingPanelReview
-                ? 'İnceleme bekleniyor'
-                : 'Panel onayı yok'
+                ? 'KYC inceleniyor'
+                : 'KYC onayı bekliyor'
           }
         />
       </div>

@@ -9,12 +9,11 @@ import {
 import type { Server, WebSocket } from 'ws';
 import { NotificationsEventsService } from './notifications-events.service';
 import type { PanelNotificationRow } from './notifications.service';
+import { CORS_ORIGINS } from '../../cors-origins';
 
 @WebSocketGateway({
   path: '/ws/panel/notifications',
-  cors: {
-    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002',
-  },
+  cors: { origin: CORS_ORIGINS },
 })
 export class PanelNotificationsGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit

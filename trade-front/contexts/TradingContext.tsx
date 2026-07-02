@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNotificationsOptional } from '@/contexts/NotificationsContext';
 import { useTradingConfig } from '@/contexts/TradingConfigContext';
 import { createPortfolio, computeEquity } from '@/lib/trading/engine';
 import {
@@ -37,14 +38,14 @@ interface TradingContextValue {
     qty: number,
     bid: number,
     ask: number,
-    opts?: { stopLoss?: number; takeProfit?: number },
+    opts?: { stopLoss?: number; takeProfit?: number; leverage?: number },
   ) => Promise<string | null>;
   sell: (
     symbol: string,
     qty: number,
     bid: number,
     ask: number,
-    opts?: { stopLoss?: number; takeProfit?: number },
+    opts?: { stopLoss?: number; takeProfit?: number; leverage?: number },
   ) => Promise<string | null>;
   close: (
     positionId: string,
@@ -56,7 +57,7 @@ interface TradingContextValue {
     side: 'buy' | 'sell',
     qty: number,
     limitPrice: number,
-    opts?: { stopLoss?: number; takeProfit?: number },
+    opts?: { stopLoss?: number; takeProfit?: number; leverage?: number },
   ) => Promise<string | null>;
   cancelOrder: (orderId: string) => Promise<string | null>;
   updatePositionStops: (
@@ -73,6 +74,7 @@ const TradingContext = createContext<TradingContextValue | null>(null);
 
 export function TradingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const notifications = useNotificationsOptional();
   const { settings } = useTradingConfig();
   const [portfolio, setPortfolio] = useState<Portfolio>(() => createPortfolio());
   const [portfolioLoading, setPortfolioLoading] = useState(false);
@@ -117,13 +119,33 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, [user]);
 
+  const showLocalTradeAlert = useCallback(
+    (side: 'buy' | 'sell', symbol: string, qty: number) => {
+      if (!user || !notifications) return;
+      const isBuy = side === 'buy';
+      notifications.showTradeAlert({
+        id: `local-${Date.now()}`,
+        userId: user.id,
+        businessId: null,
+        type: isBuy ? 'trade_buy' : 'trade_sell',
+        title: isBuy ? 'Alım işlemi gerçekleşti' : 'Satım işlemi gerçekleşti',
+        message: `${isBuy ? 'Alış' : 'Satış'} ${qty} lot ${symbol}`,
+        href: '/portfolio',
+        data: { symbol, side, quantity: qty },
+        createdAt: new Date().toISOString(),
+        read: true,
+      });
+    },
+    [notifications, user],
+  );
+
   const buy = useCallback(
     async (
       symbol: string,
       qty: number,
       bid: number,
       ask: number,
-      opts?: { stopLoss?: number; takeProfit?: number },
+      opts?: { stopLoss?: number; takeProfit?: number; leverage?: number },
     ) => {
       const authErr = requireAuth();
       if (authErr) return authErr;
@@ -136,14 +158,16 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
           ask,
           stopLoss: opts?.stopLoss,
           takeProfit: opts?.takeProfit,
+          leverage: opts?.leverage,
         });
         setPortfolio(next);
+        showLocalTradeAlert('buy', symbol, qty);
         return null;
       } catch (e) {
         return e instanceof Error ? e.message : 'İşlem başarısız';
       }
     },
-    [requireAuth],
+    [requireAuth, showLocalTradeAlert],
   );
 
   const sell = useCallback(
@@ -152,7 +176,7 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
       qty: number,
       bid: number,
       ask: number,
-      opts?: { stopLoss?: number; takeProfit?: number },
+      opts?: { stopLoss?: number; takeProfit?: number; leverage?: number },
     ) => {
       const authErr = requireAuth();
       if (authErr) return authErr;
@@ -165,29 +189,46 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
           ask,
           stopLoss: opts?.stopLoss,
           takeProfit: opts?.takeProfit,
+          leverage: opts?.leverage,
         });
         setPortfolio(next);
+        showLocalTradeAlert('sell', symbol, qty);
         return null;
       } catch (e) {
         return e instanceof Error ? e.message : 'İşlem başarısız';
       }
     },
-    [requireAuth],
+    [requireAuth, showLocalTradeAlert],
   );
 
   const close = useCallback(
     async (positionId: string, bid: number, ask: number) => {
       const authErr = requireAuth();
       if (authErr) return authErr;
+      const closingPos = portfolio.positions.find((p) => p.id === positionId);
       try {
         const next = await apiClosePosition({ positionId, bid, ask });
         setPortfolio(next);
+        if (user && notifications && closingPos) {
+          notifications.showTradeAlert({
+            id: `local-close-${Date.now()}`,
+            userId: user.id,
+            businessId: null,
+            type: 'position_closed',
+            title: 'Pozisyon kapandı',
+            message: `${closingPos.symbol} pozisyonunuz kapatıldı`,
+            href: '/portfolio',
+            data: { symbol: closingPos.symbol, positionId },
+            createdAt: new Date().toISOString(),
+            read: true,
+          });
+        }
         return null;
       } catch (e) {
         return e instanceof Error ? e.message : 'Kapatma başarısız';
       }
     },
-    [requireAuth],
+    [requireAuth, portfolio.positions, user, notifications],
   );
 
   const placeLimit = useCallback(
@@ -196,7 +237,7 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
       side: 'buy' | 'sell',
       qty: number,
       limitPrice: number,
-      opts?: { stopLoss?: number; takeProfit?: number },
+      opts?: { stopLoss?: number; takeProfit?: number; leverage?: number },
     ) => {
       const authErr = requireAuth();
       if (authErr) return authErr;
@@ -208,6 +249,7 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
           limitPrice,
           stopLoss: opts?.stopLoss,
           takeProfit: opts?.takeProfit,
+          leverage: opts?.leverage,
         });
         setPortfolio(next);
         return null;

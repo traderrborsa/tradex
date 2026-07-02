@@ -12,18 +12,15 @@ import { MEMBER_ROLE_NAME } from '../rbac/permissions.constants';
 import { RbacService } from '../rbac/rbac.service';
 import { VerificationConnectionService } from './verification-connection.service';
 import { VerificationEventsService } from './verification-events.service';
+import { CORS_ORIGINS } from '../cors-origins';
 
 interface JwtPayload {
   sub: string;
 }
 
-const CORS_ORIGIN =
-  process.env.CORS_ORIGIN ??
-  'http://localhost:3000,http://localhost:3002,http://localhost:4001,http://localhost:4002';
-
 @WebSocketGateway({
   path: '/ws/verification',
-  cors: { origin: CORS_ORIGIN },
+  cors: { origin: CORS_ORIGINS },
 })
 export class VerificationGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit

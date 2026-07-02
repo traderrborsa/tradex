@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -14,7 +14,7 @@ model User {
   fullName        String
   birthDate       DateTime?            @db.Date
   tcKimlikNo      String               @unique @db.VarChar(11)
-  phone           String               @db.VarChar(10)
+  phone           String               @db.VarChar(20)
   referenceNumber String?
   emailVerified      Boolean           @default(false)
   emailVerifiedAt    DateTime?
@@ -49,6 +49,7 @@ model User {
   verificationPolicy    MemberVerificationPolicy[]
   memberTwoFactorSettings MemberTwoFactorSettings[]
   memberVerificationStatus MemberVerificationStatus[]
+  memberNotifications      MemberNotification[]
 }
 
 model Business {
@@ -76,6 +77,7 @@ model Business {
   memberTwoFactorSettings    MemberTwoFactorSettings[]
   memberVerificationStatuses MemberVerificationStatus[]
   verificationCodes          VerificationCode[]
+  memberNotifications        MemberNotification[]
 }
 
 model BusinessTradingSettings {
@@ -212,6 +214,7 @@ model Position {
   avgEntry       Decimal        @db.Decimal(18, 8)
   stopLoss       Decimal?       @db.Decimal(18, 8)
   takeProfit     Decimal?       @db.Decimal(18, 8)
+  leverage       Int            @default(1)
   openedAt       DateTime       @default(now())
   openedByUserId String?
   openedBy       User?          @relation("PositionOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
@@ -232,6 +235,7 @@ model PendingOrder {
   limitPrice     Decimal        @db.Decimal(18, 8)
   stopLoss       Decimal?       @db.Decimal(18, 8)
   takeProfit     Decimal?       @db.Decimal(18, 8)
+  leverage       Int            @default(1)
   createdAt      DateTime       @default(now())
   openedByUserId String?
   openedBy       User?          @relation("PendingOrderOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
@@ -257,6 +261,25 @@ model Trade {
 
   @@index([accountId, executedAt])
   @@index([openedByUserId])
+}
+
+model MemberNotification {
+  id         String    @id @default(cuid())
+  userId     String
+  businessId String?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  message    String    @db.Text
+  href       String?
+  data       Json?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([businessId])
 }
 
 model PanelNotification {

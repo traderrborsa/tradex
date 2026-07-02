@@ -3,27 +3,40 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module';
+import { CORS_ORIGINS } from './cors-origins';
 import { configureStaticUploads } from './uploads/static-uploads';
+
+const WS_PATHS = [
+  '/ws/ticks',
+  '/ws/verification',
+  '/ws/portfolio',
+  '/ws/notifications',
+  '/ws/presence',
+  '/ws/panel/verification',
+  '/ws/panel/transactions',
+  '/ws/panel/finance',
+  '/ws/panel/notifications',
+  '/ws/panel/presence',
+] as const;
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   configureStaticUploads(app);
   app.useWebSocketAdapter(new WsAdapter(app));
-  const corsOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002,http://localhost:4001,http://localhost:4002')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
   app.enableCors({
-    origin: corsOrigins,
+    origin: CORS_ORIGINS,
     credentials: true,
   });
   app.setGlobalPrefix('api');
   const port = process.env.PORT ?? 3001;
+  const publicBase =
+    process.env.API_PUBLIC_URL?.replace(/\/$/, '') ??
+    `http://localhost:${port}`;
+  const wsBase = publicBase.replace(/^http/, 'ws');
   await app.listen(port);
-  console.log(`HTTP  http://localhost:${port}/api`);
-  console.log(`WS    ws://localhost:${port}/ws/ticks`);
-  console.log(`WS    ws://localhost:${port}/ws/verification`);
-  console.log(`WS    ws://localhost:${port}/ws/panel/verification`);
-  console.log(`WS    ws://localhost:${port}/ws/portfolio`);
+  console.log(`HTTP  ${publicBase}/api`);
+  for (const path of WS_PATHS) {
+    console.log(`WS    ${wsBase}${path}`);
+  }
 }
 bootstrap();

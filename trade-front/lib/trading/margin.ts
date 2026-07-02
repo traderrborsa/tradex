@@ -9,10 +9,17 @@ export const COMMISSION_RATE = DEFAULT_TRADING_SETTINGS.commissionRate;
 export function requiredMargin(
   quantity: number,
   price: number,
-  settings: EffectiveTradingSettings = DEFAULT_TRADING_SETTINGS,
+  leverage: number,
 ): number {
-  const lev = Math.max(1, settings.leverage);
+  const lev = Math.max(1, leverage);
   return (quantity * price) / lev;
+}
+
+export function positionLeverage(
+  position: { leverage?: number },
+  fallback = 1,
+): number {
+  return Math.max(1, position.leverage ?? fallback);
 }
 
 export function estimateCommission(

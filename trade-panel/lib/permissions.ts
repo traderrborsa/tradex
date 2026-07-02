@@ -37,6 +37,7 @@ export const PERMS = {
   MEMBER_VERIFICATION_WRITE: 'panel:member-verification:write',
   NOTIFICATIONS_READ: 'panel:notifications:read',
   NOTIFICATIONS_WRITE: 'panel:notifications:write',
+  MEMBER_NOTIFICATIONS_SEND: 'panel:member-notifications:send',
 } as const;
 
 export type PermissionKey = (typeof PERMS)[keyof typeof PERMS];
@@ -64,6 +65,7 @@ export const PERMISSION_GROUPS: {
       PERMS.MEMBERS_READ,
       PERMS.MEMBERS_WRITE,
       PERMS.MEMBERS_REFERRAL_ONLY,
+      PERMS.MEMBER_NOTIFICATIONS_SEND,
     ],
   },
   {

@@ -11,6 +11,7 @@ import { MEMBER_ROLE_NAME } from '../rbac/permissions.constants';
 import { RbacService } from '../rbac/rbac.service';
 import { PresenceEventsService } from './presence-events.service';
 import { PresenceService } from './presence.service';
+import { CORS_ORIGINS } from '../cors-origins';
 
 interface JwtPayload {
   sub: string;
@@ -18,9 +19,7 @@ interface JwtPayload {
 
 @WebSocketGateway({
   path: '/ws/presence',
-  cors: {
-    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002',
-  },
+  cors: { origin: CORS_ORIGINS },
 })
 export class PresenceGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(PresenceGateway.name);

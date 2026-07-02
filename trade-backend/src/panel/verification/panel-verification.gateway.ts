@@ -11,14 +11,11 @@ import {
   PanelVerificationEventsService,
   type PanelVerificationChangedPayload,
 } from './panel-verification-events.service';
-
-const CORS_ORIGIN =
-  process.env.CORS_ORIGIN ??
-  'http://localhost:3000,http://localhost:3002,http://localhost:4001,http://localhost:4002';
+import { CORS_ORIGINS } from '../../cors-origins';
 
 @WebSocketGateway({
   path: '/ws/panel/verification',
-  cors: { origin: CORS_ORIGIN },
+  cors: { origin: CORS_ORIGINS },
 })
 export class PanelVerificationGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit

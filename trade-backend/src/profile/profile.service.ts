@@ -37,6 +37,7 @@ export class ProfileService {
         fullName: true,
         phone: true,
         tcKimlikNo: true,
+        birthDate: true,
         referenceNumber: true,
         createdAt: true,
         memberships: {
@@ -89,6 +90,9 @@ export class ProfileService {
       fullName: user.fullName,
       phone: user.phone,
       tcKimlikNo: user.tcKimlikNo,
+      birthDate: user.birthDate
+        ? user.birthDate.toISOString().slice(0, 10)
+        : null,
       referenceNumber: user.referenceNumber,
       createdAt: user.createdAt.toISOString(),
       business,

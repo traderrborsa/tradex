@@ -6,6 +6,7 @@ import type {
 export class TradingSettingsDto implements BusinessSettingsPartial {
   initialBalance?: number;
   commissionRate?: number;
+  leverageOptions?: number[];
   leverage?: number;
   minLot?: number;
   maxLot?: number | null;
@@ -24,6 +25,7 @@ export class UpdateTradingSettingsDto {
 
 export class MemberTradingSettingsDto implements TradingSettingsPartial {
   commissionRate?: number;
+  leverageOptions?: number[];
   leverage?: number;
   minLot?: number;
   maxLot?: number | null;

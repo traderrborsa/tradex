@@ -179,6 +179,8 @@ export function usePositionStopsControls({
     positionMode,
     useSl,
     useTp,
+    slPrice,
+    tpPrice,
     slPriceInput,
     tpPriceInput,
     hasChanges,

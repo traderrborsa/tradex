@@ -38,8 +38,16 @@ export function buildFullName(firstName: string, lastName: string): string {
   return normalizeFullName(`${firstName} ${lastName}`);
 }
 
+// İsim/soyisimde rakam yasak; yalnızca harf (Türkçe dahil), boşluk, kesme ve tire.
+const NAME_PART_PATTERN = /^[\p{L}][\p{L}'-]*$/u;
+
+export function sanitizeNameInput(value: string): string {
+  return value.replace(/[^\p{L}\s'-]/gu, '');
+}
+
 export function isValidNamePart(value: string): boolean {
-  return value.trim().length >= 2;
+  const trimmed = value.trim();
+  return trimmed.length >= 2 && NAME_PART_PATTERN.test(trimmed);
 }
 
 export function isValidBirthDate(value: string): boolean {
@@ -71,10 +79,10 @@ export function getRegisterFormStepFieldErrors(
     case 0: {
       const errors: RegisterFieldErrors = {};
       if (!isValidNamePart(payload.firstName)) {
-        errors.firstName = 'Ad girin (en az 2 karakter)';
+        errors.firstName = 'Geçerli bir ad girin (rakam kullanmayın)';
       }
       if (!isValidNamePart(payload.lastName)) {
-        errors.lastName = 'Soyad girin (en az 2 karakter)';
+        errors.lastName = 'Geçerli bir soyad girin (rakam kullanmayın)';
       }
       return errors;
     }

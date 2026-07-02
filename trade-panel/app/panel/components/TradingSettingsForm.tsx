@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import {
+  BUSINESS_LEVERAGE_OPTIONS_FIELD,
   BUSINESS_SETTINGS_FIELDS,
+  formatLeverageOptions,
+  MEMBER_LEVERAGE_FIELD,
+  parseLeverageOptionsInput,
   TRADING_SETTINGS_FIELDS,
   type BusinessEffectiveSettings,
   type BusinessSettingsPartial,
@@ -30,7 +34,6 @@ function fieldValue(
 ): string {
   const v = values[key as keyof typeof values];
   if (v === undefined || v === null) {
-    // Bu kapsama özel bir değer yoksa input'u kalıtılan/efektif değerle doldur.
     if (key === 'maxLot' && effective.maxLot === null) return '';
     const effVal = effective[key as keyof typeof effective];
     return effVal !== undefined && effVal !== null ? String(effVal) : '';
@@ -39,13 +42,22 @@ function fieldValue(
   return String(v);
 }
 
-// Gösterilen değer bu kapsama özel mi (override) yoksa kalıtılan varsayılan mı?
 function hasOwnValue(
-  key: keyof BusinessEffectiveSettings,
+  key: keyof BusinessEffectiveSettings | 'leverageOptions' | 'leverage',
   values: TradingSettingsPartial | BusinessSettingsPartial,
 ): boolean {
   const v = values[key as keyof typeof values];
   return v !== undefined && v !== null;
+}
+
+function leverageOptionsDraftValue(
+  values: TradingSettingsPartial | BusinessSettingsPartial,
+  effective: EffectiveTradingSettings | BusinessEffectiveSettings,
+): string {
+  if (values.leverageOptions !== undefined) {
+    return formatLeverageOptions(values.leverageOptions);
+  }
+  return formatLeverageOptions(undefined, effective.leverageOptions);
 }
 
 export function TradingSettingsForm({
@@ -63,13 +75,21 @@ export function TradingSettingsForm({
     scope === 'business' ? BUSINESS_SETTINGS_FIELDS : TRADING_SETTINGS_FIELDS;
 
   const [draft, setDraft] = useState(values);
+  const [leverageOptionsText, setLeverageOptionsText] = useState(() =>
+    scope === 'business'
+      ? leverageOptionsDraftValue(values, effective)
+      : '',
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(values);
-  }, [values]);
+    if (scope === 'business') {
+      setLeverageOptionsText(leverageOptionsDraftValue(values, effective));
+    }
+  }, [values, effective, scope]);
 
   function updateField(key: keyof BusinessEffectiveSettings, raw: string) {
     setDraft((prev) => {
@@ -84,6 +104,30 @@ export function TradingSettingsForm({
       }
       const n = Number(raw);
       if (Number.isFinite(n)) (next as Record<string, number>)[key] = n;
+      return next;
+    });
+  }
+
+  function updateMemberLeverage(raw: string) {
+    setDraft((prev) => {
+      const next = { ...prev };
+      if (raw === '') {
+        delete next.leverage;
+        return next;
+      }
+      const n = Number(raw);
+      if (Number.isFinite(n) && n >= 1) next.leverage = Math.floor(n);
+      return next;
+    });
+  }
+
+  function updateBusinessLeverageOptions(raw: string) {
+    setLeverageOptionsText(raw);
+    setDraft((prev) => {
+      const next = { ...prev };
+      const parsed = parseLeverageOptionsInput(raw);
+      if (parsed) next.leverageOptions = parsed;
+      else delete next.leverageOptions;
       return next;
     });
   }
@@ -119,6 +163,9 @@ export function TradingSettingsForm({
     }
   }
 
+  const memberLeverageOwn = hasOwnValue('leverage', draft);
+  const businessLeverageOwn = hasOwnValue('leverageOptions', draft);
+
   return (
     <div className={`${CARD} p-6`}>
       <div className="mb-4">
@@ -130,6 +177,65 @@ export function TradingSettingsForm({
 
       <form onSubmit={handleSave} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
+          {scope === 'business' && (
+            <div className="sm:col-span-2">
+              <label className="mb-1 flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                {BUSINESS_LEVERAGE_OPTIONS_FIELD.label}
+                {businessLeverageOwn && (
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                    özel
+                  </span>
+                )}
+              </label>
+              <input
+                type="text"
+                className={`${INPUT} ${businessLeverageOwn ? 'font-semibold' : 'italic text-zinc-400 dark:text-zinc-500'}`}
+                value={leverageOptionsText}
+                placeholder={`Aktif: ${formatLeverageOptions(undefined, effective.leverageOptions)}`}
+                disabled={readOnly}
+                onChange={(e) => updateBusinessLeverageOptions(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-zinc-400">
+                {BUSINESS_LEVERAGE_OPTIONS_FIELD.hint}
+              </p>
+            </div>
+          )}
+
+          {scope === 'member' && (
+            <div>
+              <label className="mb-1 flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                {MEMBER_LEVERAGE_FIELD.label}
+                {memberLeverageOwn && (
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                    özel
+                  </span>
+                )}
+              </label>
+              <input
+                type="number"
+                step={MEMBER_LEVERAGE_FIELD.step}
+                className={`${INPUT} ${memberLeverageOwn ? 'font-semibold' : 'italic text-zinc-400 dark:text-zinc-500'}`}
+                value={
+                  draft.leverage !== undefined && draft.leverage !== null
+                    ? String(draft.leverage)
+                    : effective.fixedLeverage != null
+                      ? String(effective.fixedLeverage)
+                      : ''
+                }
+                placeholder={
+                  inherited?.leverage != null
+                    ? `Varsayılan: ${inherited.leverage}`
+                    : 'Boş = müşteri seçer'
+                }
+                disabled={readOnly}
+                onChange={(e) => updateMemberLeverage(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-zinc-400">
+                {MEMBER_LEVERAGE_FIELD.hint}
+              </p>
+            </div>
+          )}
+
           {fields.map(({ key, label, hint, step }) => {
             const inheritedVal = inherited?.[key as keyof TradingSettingsPartial];
             const placeholder =
@@ -199,6 +305,22 @@ export function TradingSettingsForm({
             : 'Müşteriye uygulanan işlem ayarları'}
         </p>
         <dl className="mt-2 grid gap-1 sm:grid-cols-2">
+          <div className="flex justify-between gap-2">
+            <dt className="text-zinc-500">Kaldıraç seçenekleri</dt>
+            <dd className="font-mono text-zinc-800 dark:text-zinc-200">
+              {formatLeverageOptions(undefined, effective.leverageOptions)}
+            </dd>
+          </div>
+          {scope === 'member' && (
+            <div className="flex justify-between gap-2">
+              <dt className="text-zinc-500">Sabit kaldıraç</dt>
+              <dd className="font-mono text-zinc-800 dark:text-zinc-200">
+                {effective.fixedLeverage != null
+                  ? `1:${effective.fixedLeverage}`
+                  : '— (müşteri seçer)'}
+              </dd>
+            </div>
+          )}
           {fields.map(({ key, label }) => (
             <div key={key} className="flex justify-between gap-2">
               <dt className="text-zinc-500">{label}</dt>

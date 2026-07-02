@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { BistModule } from '../bist/bist.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { VerificationModule } from '../verification/verification.module';
+import { MemberNotificationsModule } from '../member-notifications/member-notifications.module';
 import { TradingAccountService } from './trading-account.service';
 import { TradingConfigService } from './trading-config.service';
 import { TradingController } from './trading.controller';
@@ -16,6 +17,7 @@ import { PortfolioGateway } from './portfolio.gateway';
     BistModule,
     VerificationModule,
     RbacModule,
+    MemberNotificationsModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'tradex-dev-secret-change-me',
       signOptions: { expiresIn: '7d' },

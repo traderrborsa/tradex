@@ -13,6 +13,8 @@ export interface Position {
   openedAt: string;
   stopLoss?: number;
   takeProfit?: number;
+  /** Pozisyon açılırken kullanılan kaldıraç (1 = kaldıraçsız). */
+  leverage: number;
 }
 
 export interface PendingOrder {
@@ -23,6 +25,7 @@ export interface PendingOrder {
   limitPrice: number;
   stopLoss?: number;
   takeProfit?: number;
+  leverage: number;
   createdAt: string;
 }
 
@@ -43,10 +46,26 @@ export interface Trade {
   netPnl?: number;
   /** Bakiyeye yansıyan net kâr: brüt − kapanış komisyonu. */
   balancePnl?: number;
+  /** Kapalı pozisyon: alış fiyatı. */
+  buyPrice?: number;
+  /** Kapalı pozisyon: satış fiyatı. */
+  sellPrice?: number;
+  /** Kapalı pozisyon: alış tarihi (ISO). */
+  buyAt?: string;
+  /** Kapalı pozisyon: satış tarihi (ISO). */
+  sellAt?: string;
 }
 
 export interface Portfolio {
   balance: number;
+  /** Onaylı bonus toplamı. */
+  bonusIncome?: number;
+  /** Onaylı kredi toplamı. */
+  creditIncome?: number;
+  /** Yatırım/işlem kaynaklı nakit (bonus hariç). */
+  cashBalance?: number;
+  /** Nakit + bonus + kredi toplamı. */
+  totalBalance?: number;
   positions: Position[];
   pendingOrders: PendingOrder[];
   history: Trade[];

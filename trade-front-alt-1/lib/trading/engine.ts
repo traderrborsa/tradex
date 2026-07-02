@@ -1,7 +1,7 @@
 import { getTradingBlockReason } from '@/lib/market-hours';
 import type { EffectiveTradingSettings } from '@/lib/trading-config';
 import { DEFAULT_TRADING_SETTINGS } from '@/lib/trading-config';
-import { estimateCommission, requiredMargin } from './margin';
+import { estimateCommission, positionLeverage, requiredMargin } from './margin';
 import type { PendingOrder, Portfolio, Position, Trade } from './types';
 import { INITIAL_BALANCE } from './types';
 
@@ -15,7 +15,16 @@ function uid() {
 }
 
 export function createPortfolio(): Portfolio {
-  return { balance: INITIAL_BALANCE, positions: [], pendingOrders: [], history: [] };
+  return {
+    balance: INITIAL_BALANCE,
+    bonusIncome: 0,
+    creditIncome: 0,
+    cashBalance: INITIAL_BALANCE,
+    totalBalance: INITIAL_BALANCE,
+    positions: [],
+    pendingOrders: [],
+    history: [],
+  };
 }
 
 export function getPosition(portfolio: Portfolio, symbol: string) {
@@ -40,6 +49,32 @@ export function unrealizedPnl(
   return (position.avgEntry - ask) * position.quantity;
 }
 
+/** TP/SL fiyatında gerçekleşmesi muhtemel K/Z (komisyon hariç). */
+export function potentialPnlForOrder(
+  side: Position['side'],
+  quantity: number,
+  entryPrice: number,
+  exitPrice: number,
+): number {
+  if (exitPrice <= 0 || quantity <= 0 || entryPrice <= 0) return 0;
+  if (side === 'long') {
+    return (exitPrice - entryPrice) * quantity;
+  }
+  return (entryPrice - exitPrice) * quantity;
+}
+
+export function potentialPnlAtPrice(
+  position: Position,
+  exitPrice: number,
+): number {
+  return potentialPnlForOrder(
+    position.side,
+    position.quantity,
+    position.avgEntry,
+    exitPrice,
+  );
+}
+
 export function computeEquity(
   portfolio: Portfolio,
   quotes: Record<string, { bid: number; ask: number }>,
@@ -48,7 +83,11 @@ export function computeEquity(
   let equity = portfolio.balance;
   for (const pos of portfolio.positions) {
     const sym = pos.symbol.toUpperCase();
-    equity += requiredMargin(pos.quantity, pos.avgEntry, settings);
+    equity += requiredMargin(
+      pos.quantity,
+      pos.avgEntry,
+      positionLeverage(pos),
+    );
     const q = quotes[sym];
     if (q) {
       equity += unrealizedPnl(pos, q.bid, q.ask);

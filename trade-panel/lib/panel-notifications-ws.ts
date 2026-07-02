@@ -1,14 +1,11 @@
 import type { PanelNotification } from './panel/notifications';
+import { resolveWsUrl } from './ws-url';
 
 type NotificationHandler = (notification: PanelNotification) => void;
 
 type ServerMessage =
   | { type: 'connected' }
   | { type: 'notification'; notification: PanelNotification };
-
-const WS_URL =
-  process.env.NEXT_PUBLIC_PANEL_NOTIFICATIONS_WS_URL ??
-  'ws://localhost:3001/ws/panel/notifications';
 
 let socket: WebSocket | null = null;
 let connectPromise: Promise<WebSocket> | null = null;
@@ -17,11 +14,10 @@ const handlers = new Set<NotificationHandler>();
 let refCount = 0;
 
 function getWsUrl() {
-  if (typeof window === 'undefined') return WS_URL;
-  const env = process.env.NEXT_PUBLIC_PANEL_NOTIFICATIONS_WS_URL;
-  if (env) return env;
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:3001/ws/panel/notifications`;
+  return resolveWsUrl(
+    '/ws/panel/notifications',
+    process.env.NEXT_PUBLIC_PANEL_NOTIFICATIONS_WS_URL,
+  );
 }
 
 function dispatchNotification(notification: PanelNotification) {

@@ -14,10 +14,18 @@ export function normalizeFullName(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
+// Yalnızca harf (Türkçe dahil), boşluk, kesme işareti ve tire kabul edilir; rakam yasak.
+const NAME_PART_PATTERN = /^[\p{L}][\p{L}'-]*$/u;
+
+export function isValidNamePart(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.length >= 2 && NAME_PART_PATTERN.test(trimmed);
+}
+
 export function isValidFullName(value: string): boolean {
   const normalized = normalizeFullName(value);
   const parts = normalized.split(' ').filter(Boolean);
-  return parts.length >= 2 && parts.every((part) => part.length >= 2);
+  return parts.length >= 2 && parts.every((part) => isValidNamePart(part));
 }
 
 export function parseBirthDate(value: string): Date | null {

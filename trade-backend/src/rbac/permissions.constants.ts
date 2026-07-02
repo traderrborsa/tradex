@@ -41,6 +41,7 @@ export const PERMISSIONS = {
   PANEL_MEMBER_VERIFICATION_WRITE: 'panel:member-verification:write',
   PANEL_NOTIFICATIONS_READ: 'panel:notifications:read',
   PANEL_NOTIFICATIONS_WRITE: 'panel:notifications:write',
+  PANEL_MEMBER_NOTIFICATIONS_SEND: 'panel:member-notifications:send',
   TRADING_BYPASS_MARKET_HOURS: 'trading:bypass-market-hours',
 } as const;
 
@@ -279,6 +280,13 @@ export const ALL_PERMISSIONS: {
     adminOnly: false,
   },
   {
+    key: PERMISSIONS.PANEL_MEMBER_NOTIFICATIONS_SEND,
+    displayName: 'Müşteri bildirimi gönder',
+    description:
+      'Kendi işletmesindeki müşterilere sistem bildirimi gönderebilir',
+    adminOnly: false,
+  },
+  {
     key: PERMISSIONS.TRADING_BYPASS_MARKET_HOURS,
     displayName: 'Piyasa saati dışı işlem',
     description: 'Piyasa kapalıyken işlem yapabilir',
@@ -351,6 +359,7 @@ const BUSINESS_MANAGER_PERMISSIONS = [
   PERMISSIONS.PANEL_MEMBER_VERIFICATION_READ,
   PERMISSIONS.PANEL_NOTIFICATIONS_READ,
   PERMISSIONS.PANEL_NOTIFICATIONS_WRITE,
+  PERMISSIONS.PANEL_MEMBER_NOTIFICATIONS_SEND,
 ] as const;
 
 const OPERATIONS_OPERATOR_PERMISSIONS = [
@@ -392,6 +401,7 @@ export const PERMISSION_GROUPS: {
       PERMISSIONS.PANEL_MEMBERS_READ,
       PERMISSIONS.PANEL_MEMBERS_WRITE,
       PERMISSIONS.PANEL_MEMBERS_REFERRAL_ONLY,
+      PERMISSIONS.PANEL_MEMBER_NOTIFICATIONS_SEND,
     ],
   },
   {

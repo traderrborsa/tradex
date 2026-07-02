@@ -8,9 +8,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTrading } from "@/contexts/TradingContext";
 import { BrandLogo } from "@/components/BrandLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { VerificationRequiredModal } from "@/components/VerificationRequiredModal";
+import { NotificationDropdown } from "@/components/NotificationDropdown";
 import { formatMoney } from "@/lib/format-money";
-import { userNeedsVerification } from "@/lib/verification";
 import { SymbolSearch } from "./SymbolSearch";
 
 interface Props {
@@ -64,25 +63,25 @@ function PortfolioMenuIcon() {
   );
 }
 
-function WithdrawMenuIcon() {
+function FinanceMenuIcon() {
   return (
     <MenuIcon>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="h-4 w-4" aria-hidden>
-        <path d="M12 3v12" strokeLinecap="round" />
-        <path d="m7 10 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M5 21h14" strokeLinecap="round" />
+        <rect x="3" y="6" width="18" height="13" rx="2" />
+        <path d="M3 10h18" />
+        <path d="M16 14.5h2" strokeLinecap="round" />
       </svg>
     </MenuIcon>
   );
 }
 
-function DepositMenuIcon() {
+function RequestsMenuIcon() {
   return (
     <MenuIcon>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="h-4 w-4" aria-hidden>
-        <path d="M12 21V9" strokeLinecap="round" />
-        <path d="m7 14 5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M5 3h14" strokeLinecap="round" />
+        <path d="M7 3h7l5 5v13a0 0 0 0 1 0 0H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" strokeLinejoin="round" />
+        <path d="M14 3v5h5" strokeLinejoin="round" />
+        <path d="M9 13h6M9 17h4" strokeLinecap="round" />
       </svg>
     </MenuIcon>
   );
@@ -94,8 +93,8 @@ function UserMenu() {
   const { portfolio } = useTrading();
   const [open, setOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-  const [financeVerifyOpen, setFinanceVerifyOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -104,17 +103,16 @@ function UserMenu() {
 
   const close = useCallback(() => setOpen(false), []);
 
-  const openFinance = useCallback(
-    (path: "/portfolio/withdraw" | "/portfolio/deposit") => {
-      close();
-      if (userNeedsVerification(user)) {
-        setFinanceVerifyOpen(true);
-        return;
-      }
-      router.push(path);
-    },
-    [close, router, user],
-  );
+  const copyId = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      await navigator.clipboard.writeText(user.id);
+      setCopiedId(true);
+      window.setTimeout(() => setCopiedId(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }, [user?.id]);
 
   const confirmLogout = useCallback(() => {
     setLogoutConfirmOpen(false);
@@ -170,8 +168,34 @@ function UserMenu() {
         >
           <div className="border-b border-border px-4 py-3">
             <p className="truncate text-sm font-medium text-foreground">
-              {user.email}
+              {user.fullName?.trim() || 'Hesabım'}
             </p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void copyId();
+              }}
+              title="ID'yi kopyala"
+              className="mt-1 flex w-full items-center gap-1 text-xs text-muted transition hover:text-foreground"
+            >
+              <span className="truncate font-mono">ID: {user.id}</span>
+              {copiedId ? (
+                <span className="shrink-0 text-emerald-500">✓</span>
+              ) : (
+                <svg
+                  className="h-3 w-3 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              )}
+            </button>
             <p className="mt-1 text-xs text-muted">
               Bakiye:{' '}
               <span className="font-mono text-secondary">
@@ -191,6 +215,16 @@ function UserMenu() {
           </Link>
 
           <Link
+            href="/finance"
+            role="menuitem"
+            onClick={close}
+            className={MENU_ITEM}
+          >
+            <FinanceMenuIcon />
+            Finansal İşlemler
+          </Link>
+
+          <Link
             href="/portfolio"
             role="menuitem"
             onClick={close}
@@ -200,25 +234,15 @@ function UserMenu() {
             Portföy
           </Link>
 
-          <button
-            type="button"
+          <Link
+            href="/requests"
             role="menuitem"
-            onClick={() => openFinance("/portfolio/withdraw")}
-            className={`${MENU_ITEM} w-full cursor-pointer text-left`}
+            onClick={close}
+            className={MENU_ITEM}
           >
-            <WithdrawMenuIcon />
-            Para çek
-          </button>
-
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => openFinance("/portfolio/deposit")}
-            className={`${MENU_ITEM} w-full cursor-pointer text-left`}
-          >
-            <DepositMenuIcon />
-            Para yatır
-          </button>
+            <RequestsMenuIcon />
+            Taleplerim
+          </Link>
 
           <button
             type="button"
@@ -234,14 +258,6 @@ function UserMenu() {
         </div>
       )}
       </div>
-
-      <VerificationRequiredModal
-        open={financeVerifyOpen}
-        onClose={() => setFinanceVerifyOpen(false)}
-        user={user}
-        title="Para yatırma / çekme için doğrulama gerekli"
-        description="Para yatırma ve çekme işlemlerine geçmeden önce hesabınızı doğrulamanız gerekiyor."
-      />
 
       {mounted &&
         logoutConfirmOpen &&
@@ -331,6 +347,7 @@ export function AppHeader({ showSearch = false, searchQuery }: Props) {
           <ThemeToggle />
           {user ? (
             <>
+              <NotificationDropdown />
               <Link
                 href="/portfolio"
                 className="hidden h-[36px] items-center gap-1.5 rounded-full border border-border-strong bg-card px-4 py-2 text-sm leading-none transition hover:border-border-strong sm:inline-flex"

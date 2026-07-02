@@ -11,7 +11,7 @@ import { CHART_INTERVALS } from '@/lib/types';
 import { useTrading } from '@/contexts/TradingContext';
 import { useLiveTick } from '@/hooks/useLiveTick';
 import { CandlestickChart } from './CandlestickChart';
-import { OpenPositionsBar } from './OpenPositionsBar';
+import { PositionsView } from './PositionsView';
 import { PriceHeader } from './PriceHeader';
 import { SkeletonChart } from './ui/Skeleton';
 
@@ -70,9 +70,7 @@ export function SymbolChartView({ symbol }: Props) {
   const livePrice = tick != null ? resolvePrice(tick) : undefined;
 
   return (
-    <div
-      className={`flex min-h-screen flex-col bg-background ${portfolio.positions.length > 0 ? 'pb-48' : ''}`}
-    >
+    <div className="flex min-h-screen flex-col bg-background">
       <AppHeader showSearch />
 
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-4 sm:p-6 lg:flex-row lg:items-stretch lg:px-8">
@@ -137,7 +135,11 @@ export function SymbolChartView({ symbol }: Props) {
         )}
       </main>
 
-      {!error && <OpenPositionsBar activeSymbol={sym} />}
+      {!error && (
+        <section className="mx-auto w-full max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
+          <PositionsView filterSymbol={sym} title="Bu maldaki işlemlerim" card />
+        </section>
+      )}
     </div>
   );
 }

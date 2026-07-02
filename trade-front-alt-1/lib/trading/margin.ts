@@ -9,10 +9,17 @@ export const COMMISSION_RATE = DEFAULT_TRADING_SETTINGS.commissionRate;
 export function requiredMargin(
   quantity: number,
   price: number,
-  settings: EffectiveTradingSettings = DEFAULT_TRADING_SETTINGS,
+  leverage: number,
 ): number {
-  const lev = Math.max(1, settings.leverage);
+  const lev = Math.max(1, leverage);
   return (quantity * price) / lev;
+}
+
+export function positionLeverage(
+  position: { leverage?: number },
+  fallback = 1,
+): number {
+  return Math.max(1, position.leverage ?? fallback);
 }
 
 export function estimateCommission(
@@ -38,6 +45,7 @@ export function clampLot(
   return clamped;
 }
 
+/** Günlük swap (1 lot, TL) — panel efektif ayarları kullanılır. */
 const CRYPTO_PREFIX =
   /^(BTC|ETH|XRP|SOL|DOGE|ADA|BNB|LTC|DOT|AVAX|LINK|MATIC|SHIB|UNI|ATOM)/;
 
@@ -66,12 +74,14 @@ export function swapForVolume(
   ratePerLot: number,
   quantity: number,
 ): number {
-  return Math.round(ratePerLot * quantity * 100) / 100;
+  return Math.round(ratePerLot * quantity * 1_000_000) / 1_000_000;
 }
 
 export function formatSwap(value: number): string {
   const sign = value > 0 ? '+' : '';
   const abs = Math.abs(value);
-  const decimals = abs > 0 && abs < 0.01 ? 4 : 2;
+  let decimals = 2;
+  if (abs > 0 && abs < 0.01) decimals = 4;
+  if (abs > 0 && abs < 0.0001) decimals = 6;
   return `${sign}${value.toFixed(decimals)}`;
 }

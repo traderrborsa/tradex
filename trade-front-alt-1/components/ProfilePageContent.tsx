@@ -266,7 +266,7 @@ export function ProfilePageContent() {
       void refreshUser();
       if (msg.identityVerified) {
         setMessage(
-          'Evraklarınız panel tarafından onaylandı. Artık işlem yapabilirsiniz.',
+          'KYC (Kimlik Onayı) tamamlandı. Artık işlem yapabilirsiniz.',
         );
       } else if (msg.emailVerified) {
         setMessage('E-posta adresiniz doğrulandı.');
@@ -316,6 +316,14 @@ export function ProfilePageContent() {
         <h2 className="text-lg font-semibold text-foreground">Kişisel bilgiler</h2>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
+            <dt className="text-xs uppercase text-muted">T.C. Kimlik No</dt>
+            <dd className="mt-1 text-sm tabular-nums">
+              {profile.tcKimlikNo
+                ? `••••••• ${profile.tcKimlikNo.slice(-4)}`
+                : '—'}
+            </dd>
+          </div>
+          <div>
             <dt className="text-xs uppercase text-muted">Ad soyad</dt>
             <dd className="mt-1 text-sm">{profile.fullName}</dd>
           </div>
@@ -355,8 +363,12 @@ export function ProfilePageContent() {
             </dd>
           </div>
           <div>
-            <dt className="text-xs uppercase text-muted">T.C. Kimlik</dt>
-            <dd className="mt-1 text-sm">{profile.tcKimlikNo}</dd>
+            <dt className="text-xs uppercase text-muted">Doğum tarihi</dt>
+            <dd className="mt-1 text-sm">
+              {profile.birthDate
+                ? new Date(profile.birthDate).toLocaleDateString('tr-TR')
+                : '—'}
+            </dd>
           </div>
           <div>
             <dt className="text-xs uppercase text-muted">Kayıt tarihi</dt>
@@ -538,8 +550,8 @@ export function ProfilePageContent() {
               ok={v.identityVerified}
               label={
                 v.identityVerified
-                  ? 'Evrak onaylı (panel)'
-                  : 'Evrak — panel onayı bekliyor'
+                  ? 'KYC (Kimlik Onayı) onaylandı'
+                  : 'KYC (Kimlik Onayı) bekliyor'
               }
             />
           )}

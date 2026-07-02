@@ -772,7 +772,7 @@ export class VerificationService {
       missing.push('SMS doğrulaması');
     }
     if (settings.identityVerificationRequired && !status.identityVerified) {
-      missing.push('Evrak onayı (panel)');
+      missing.push('KYC (Kimlik Onayı)');
     }
 
     return {

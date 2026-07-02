@@ -62,6 +62,7 @@ export interface UserProfile {
   fullName: string;
   phone: string;
   tcKimlikNo: string;
+  birthDate: string | null;
   referenceNumber: string | null;
   createdAt: string;
   business: ProfileBusiness | null;

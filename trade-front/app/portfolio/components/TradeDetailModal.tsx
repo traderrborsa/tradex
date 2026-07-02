@@ -1,11 +1,19 @@
 'use client';
 
 import Link from 'next/link';
+import { useTradingConfig } from '@/contexts/TradingConfigContext';
+import { isBistSymbol } from '@/lib/bist-symbols';
 import type { Trade } from '@/lib/trading/types';
 import { formatMoney } from '@/lib/format-money';
 import { formatMarketPrice } from '@/lib/price';
 import { formatTradeSide } from '@/lib/symbol-labels';
-import { isCloseTrade, tradeGrossPnl, tradeNetPnl } from '@/lib/trading-pnl';
+import {
+  hasTradeLegs,
+  isCloseTrade,
+  tradeBistPriceChangePct,
+  tradeGrossPnl,
+  tradeNetPnl,
+} from '@/lib/trading-pnl';
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('tr-TR', {
@@ -51,7 +59,16 @@ function pnlClass(value: number) {
   return value >= 0 ? 'text-emerald-400' : 'text-red-400';
 }
 
+function formatPct(value: number) {
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toLocaleString('tr-TR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
 export function TradeDetailModal({ trade, onClose }: Props) {
+  const { settings } = useTradingConfig();
   const sym = trade.symbol.toUpperCase();
   const isBuy = trade.side === 'buy';
   const notional = trade.quantity * trade.price;
@@ -59,6 +76,13 @@ export function TradeDetailModal({ trade, onClose }: Props) {
   const gross = tradeGrossPnl(trade);
   const closed = isCloseTrade(trade);
   const hasPnl = net != null;
+  const showLegs = closed && hasTradeLegs(trade);
+  const bistPct =
+    showLegs &&
+    isBistSymbol(sym) &&
+    Math.max(...settings.leverageOptions, 1) === 1
+      ? tradeBistPriceChangePct(trade)
+      : null;
 
   return (
     <div
@@ -137,6 +161,36 @@ export function TradeDetailModal({ trade, onClose }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
+          {showLegs && (
+            <div className="mb-4 rounded-xl border border-border bg-elevated/40 px-4 py-3.5">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                Alış Fiyatı − Satış Fiyatı
+              </p>
+              <p className="mt-2 font-mono text-sm font-semibold text-foreground">
+                {formatMarketPrice(trade.buyPrice!, sym)} −{' '}
+                {formatMarketPrice(trade.sellPrice!, sym)}
+              </p>
+              <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted">
+                Alış Tarihi − Satış Tarihi
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-secondary">
+                {formatDateTime(trade.buyAt!)} − {formatDateTime(trade.sellAt!)}
+              </p>
+              {bistPct != null && (
+                <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted">
+                  Fiyat değişimi
+                </p>
+              )}
+              {bistPct != null && (
+                <p
+                  className={`mt-1.5 text-lg font-bold tabular-nums ${pnlClass(bistPct)}`}
+                >
+                  {formatPct(bistPct)}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard
               label="Miktar"
@@ -187,17 +241,6 @@ export function TradeDetailModal({ trade, onClose }: Props) {
               )}
             </div>
           )}
-
-          {trade.note?.trim() && (
-            <div className="mt-4 rounded-xl border border-border bg-elevated/40 px-4 py-3.5">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                Açıklama
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">
-                {trade.note.trim()}
-              </p>
-            </div>
-          )}
         </div>
 
         <div className="flex shrink-0 gap-3 border-t border-border px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -212,7 +255,7 @@ export function TradeDetailModal({ trade, onClose }: Props) {
             onClick={onClose}
             className="flex-1 rounded-xl bg-accent py-3 text-sm font-semibold text-accent-fg transition hover:opacity-90"
           >
-            Kapat
+            Tamam
           </button>
         </div>
       </div>

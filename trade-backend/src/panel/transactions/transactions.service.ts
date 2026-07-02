@@ -16,6 +16,11 @@ import {
   estimateCommissionFee,
   netPnl,
 } from '../../trading/trading-fees';
+import {
+  buildTradeOpenIndex,
+  openTradeForClose,
+  resolveClosedTradeLegs,
+} from '../../trading/trade-history-pnl';
 import { TransactionsEventsService } from './transactions-events.service';
 import { PortfolioEventsService } from '../../trading/portfolio-events.service';
 import { resolvePanelBusinessIds } from '../panel-business-scope';
@@ -73,42 +78,21 @@ export class PanelTransactionsService {
       symbol: string;
       executedAt: Date;
       note: string | null;
+      price?: unknown;
     }[],
   ) {
-    const index = new Map<
-      string,
-      { executedAt: Date; note: string }[]
-    >();
-    for (const row of rows) {
-      const key = `${row.accountId}:${row.symbol.toUpperCase()}`;
-      if (!index.has(key)) index.set(key, []);
-      index.get(key)!.push({
-        executedAt: row.executedAt,
-        note: row.note ?? '',
-      });
-    }
-    for (const events of index.values()) {
-      events.sort((a, b) => a.executedAt.getTime() - b.executedAt.getTime());
-    }
-    return index;
+    return buildTradeOpenIndex(rows);
   }
 
   private openTimeForCloseTrade(
-    index: Map<string, { executedAt: Date; note: string }[]>,
+    index: ReturnType<typeof buildTradeOpenIndex>,
     accountId: string,
     symbol: string,
     closeAt: Date,
     note: string | null,
   ): Date | null {
-    if (!note?.includes('kapat')) return null;
-    const key = `${accountId}:${symbol.toUpperCase()}`;
-    const events = index.get(key) ?? [];
-    let lastOpen: Date | null = null;
-    for (const event of events) {
-      if (event.executedAt.getTime() >= closeAt.getTime()) break;
-      if (event.note.includes('aç')) lastOpen = event.executedAt;
-    }
-    return lastOpen;
+    const open = openTradeForClose(index, accountId, symbol, closeAt, note);
+    return open?.executedAt ?? null;
   }
 
   private async userScopeWhere(
@@ -422,7 +406,22 @@ export class PanelTransactionsService {
     });
 
     const settingsCache = new Map<string, EffectiveTradingSettings>();
-    const openIndex = this.buildTradeOpenIndex(rows);
+    const accountIds = [...new Set(rows.map((r) => r.accountId))];
+    const allTrades =
+      accountIds.length > 0
+        ? await this.prisma.trade.findMany({
+            where: { accountId: { in: accountIds } },
+            select: {
+              accountId: true,
+              symbol: true,
+              executedAt: true,
+              note: true,
+              price: true,
+            },
+            orderBy: { executedAt: 'asc' },
+          })
+        : [];
+    const openIndex = this.buildTradeOpenIndex(allTrades);
 
     return Promise.all(
       rows.map(async (row) => {
@@ -432,19 +431,26 @@ export class PanelTransactionsService {
           row.account.businessId,
         );
         const quantity = toNum(row.quantity);
-        const openPrice = toNum(row.price);
+        const closePrice = toNum(row.price);
         const commission = estimateCommissionFee(
           quantity,
-          openPrice,
+          closePrice,
           settings,
         );
         const note = row.note ?? null;
-        const openTime = this.openTimeForCloseTrade(
+        const openTrade = openTradeForClose(
           openIndex,
           row.accountId,
           row.symbol,
           row.executedAt,
           note,
+        );
+        const openTime = openTrade?.executedAt ?? null;
+        const legs = resolveClosedTradeLegs(
+          closePrice,
+          row.executedAt,
+          note,
+          openTrade,
         );
         const swap =
           openTime != null
@@ -468,14 +474,14 @@ export class PanelTransactionsService {
           symbol: row.symbol,
           side: row.side,
           quantity,
-          openPrice,
+          openPrice: closePrice,
           stopLoss: null,
           takeProfit: null,
           swap,
           commission,
           profit: netPnl(gross, swap, commission),
           openedAt: row.executedAt.toISOString(),
-          note,
+          ...(legs ?? {}),
         };
       }),
     );
@@ -596,29 +602,40 @@ export class PanelTransactionsService {
     const price = toNum(row.price);
     const commission = estimateCommissionFee(quantity, price, settings);
     const note = row.note ?? null;
+    const openTrade = await this.prisma.trade.findFirst({
+      where: {
+        accountId: row.accountId,
+        symbol: row.symbol,
+        executedAt: { lt: row.executedAt },
+        note: { contains: 'aç' },
+      },
+      orderBy: { executedAt: 'desc' },
+      select: { executedAt: true, price: true },
+    });
+    const openEvent = openTrade
+      ? {
+          executedAt: openTrade.executedAt,
+          note: '',
+          price: toNum(openTrade.price),
+        }
+      : null;
+    const legs = resolveClosedTradeLegs(
+      price,
+      row.executedAt,
+      note,
+      openEvent,
+    );
     let swap = 0;
-    if (note?.includes('kapat')) {
-      const openTrade = await this.prisma.trade.findFirst({
-        where: {
-          accountId: row.accountId,
-          symbol: row.symbol,
-          executedAt: { lt: row.executedAt },
-          note: { contains: 'aç' },
-        },
-        orderBy: { executedAt: 'desc' },
-        select: { executedAt: true },
-      });
-      if (openTrade) {
-        swap = accrueSwap(
-          row.symbol,
-          this.positionSideFromNote(note),
-          quantity,
-          openTrade.executedAt,
-          settings,
-          undefined,
-          row.executedAt,
-        );
-      }
+    if (openTrade) {
+      swap = accrueSwap(
+        row.symbol,
+        this.positionSideFromNote(note),
+        quantity,
+        openTrade.executedAt,
+        settings,
+        undefined,
+        row.executedAt,
+      );
     }
     const gross = toNum(row.realizedPnl);
 
@@ -632,11 +649,11 @@ export class PanelTransactionsService {
       quantity,
       price,
       realizedPnl: gross,
-      note,
       executedAt: row.executedAt.toISOString(),
       swap,
       commission,
       netPnl: netPnl(gross, swap, commission),
+      ...(legs ?? {}),
     };
   }
 
@@ -771,7 +788,6 @@ export class PanelTransactionsService {
         ...(dto.quantity != null ? { quantity: dto.quantity } : {}),
         ...(dto.price != null ? { price: dto.price } : {}),
         ...(dto.realizedPnl != null ? { realizedPnl: dto.realizedPnl } : {}),
-        ...(dto.note !== undefined ? { note: dto.note } : {}),
         ...(dto.executedAt != null
           ? { executedAt: new Date(dto.executedAt) }
           : {}),

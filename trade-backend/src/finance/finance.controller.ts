@@ -29,6 +29,14 @@ export class FinanceController {
     return this.finance.listActiveDepositBanks(req.user.id, businessId);
   }
 
+  @Get('requests')
+  listMyRequests(
+    @Req() req: { user: { id: string } },
+    @Query('businessId') businessId?: string,
+  ) {
+    return this.finance.listForMember(req.user.id, businessId);
+  }
+
   @Get('banks')
   listBanks(
     @Req() req: { user: { id: string } },

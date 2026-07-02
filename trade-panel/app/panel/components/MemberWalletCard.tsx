@@ -89,8 +89,10 @@ export function MemberWalletCard({ userId, businessId }: Props) {
     <div className={`${CARD} p-6`}>
       <h2 className="text-sm font-semibold">Bakiye ve teminat</h2>
       <p className="mt-1 text-xs text-zinc-500">
-        Müşteri hesabındaki para ve açık pozisyonlarda kilitli teminat (kaldıraç{' '}
-        1:{wallet.leverage})
+        Müşteri hesabındaki para ve açık pozisyonlarda kilitli teminat
+        {wallet.leverage != null
+          ? ` (sabit kaldıraç 1:${wallet.leverage})`
+          : ` (seçilebilir: ${wallet.leverageOptions.map((l) => `1:${l}`).join(', ')})`}
       </p>
 
       <dl className="mt-4 grid gap-4 sm:grid-cols-3">

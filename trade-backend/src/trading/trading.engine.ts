@@ -3,6 +3,7 @@ import {
   validateLot,
   type EffectiveTradingSettings,
   requiredMargin,
+  positionLeverage,
 } from './trading-config.types';
 import {
   INITIAL_BALANCE,
@@ -18,6 +19,8 @@ type TradeOpts = {
   fillPrice?: number;
   marketClosed?: string;
   config?: EffectiveTradingSettings;
+  /** İşlemde seçilen kaldıraç; pozisyon açılışında zorunlu. */
+  leverage?: number;
   /**
    * true  → Borsa (BIST) davranışı: aynı sembolde tek pozisyon, ortalama maliyet
    *          (average down) ve ters yönde netleşme.
@@ -26,6 +29,9 @@ type TradeOpts = {
    */
   merge?: boolean;
 };
+
+const BIST_SHORT_SELL_DISABLED_ERROR =
+  'BIST hisselerinde açığa satış kapalı';
 
 /** TP fiyatından kâr hesaplanıp piyasa fiyatından kaydedilen kapanış logu. */
 export interface TpAdjustedCloseEvent {
@@ -48,6 +54,23 @@ function resolveConfig(opts?: TradeOpts): EffectiveTradingSettings {
 
 function shouldMerge(opts?: TradeOpts): boolean {
   return opts?.merge ?? true;
+}
+
+function availableLongQuantity(
+  portfolio: Portfolio,
+  symbol: string,
+  reservePendingSells = false,
+) {
+  const sym = symbol.toUpperCase();
+  const long =
+    portfolio.positions.find((p) => p.symbol === sym && p.side === 'long')
+      ?.quantity ?? 0;
+  if (!reservePendingSells) return long;
+
+  const pendingSell = portfolio.pendingOrders
+    .filter((o) => o.symbol === sym && o.side === 'sell')
+    .reduce((sum, o) => sum + o.quantity, 0);
+  return Math.max(0, long - pendingSell);
 }
 
 function uid() {
@@ -86,6 +109,7 @@ function makePosition(
   side: Position['side'],
   quantity: number,
   avgEntry: number,
+  leverage: number,
 ): Position {
   return {
     id: uid(),
@@ -93,8 +117,13 @@ function makePosition(
     side,
     quantity,
     avgEntry,
+    leverage: Math.max(1, leverage),
     openedAt: new Date().toISOString(),
   };
+}
+
+function resolveTradeLeverage(opts?: TradeOpts): number {
+  return Math.max(1, opts?.leverage ?? 1);
 }
 
 /** Pozisyonu id'sine göre günceller; quantity<=0 ise listeden çıkarır. */
@@ -154,7 +183,8 @@ export function executeBuy(
 
   // FX: netleşme/birleştirme yok — her zaman bağımsız yeni long pozisyon aç.
   if (!shouldMerge(opts)) {
-    const margin = requiredMargin(quantity, fillAsk, cfg.leverage);
+    const lev = resolveTradeLeverage(opts);
+    const margin = requiredMargin(quantity, fillAsk, lev);
     const commission = estimateCommission(quantity, fillAsk, cfg.commissionRate);
     if (balance < margin + commission) {
       return { portfolio, error: 'Yetersiz bakiye' };
@@ -163,7 +193,7 @@ export function executeBuy(
     positions = [
       ...positions,
       applyStops(
-        makePosition(sym, 'long', quantity, fillAsk),
+        makePosition(sym, 'long', quantity, fillAsk, lev),
         opts?.stopLoss,
         opts?.takeProfit,
       ),
@@ -196,7 +226,7 @@ export function executeBuy(
     const marginRelease = requiredMargin(
       closeQty,
       existing.avgEntry,
-      cfg.leverage,
+      positionLeverage(existing),
     );
     balance += marginRelease + realized;
     balance = chargeCommission(balance, closeQty, fillAsk, cfg.commissionRate);
@@ -222,7 +252,8 @@ export function executeBuy(
   }
 
   if (remaining > 0) {
-    const margin = requiredMargin(remaining, fillAsk, cfg.leverage);
+    const lev = resolveTradeLeverage(opts);
+    const margin = requiredMargin(remaining, fillAsk, lev);
     const commission = estimateCommission(
       remaining,
       fillAsk,
@@ -240,10 +271,14 @@ export function executeBuy(
       const totalQty = long.quantity + remaining;
       const avgEntry =
         (long.avgEntry * long.quantity + fillAsk * remaining) / totalQty;
+      const oldLev = positionLeverage(long);
+      const avgLev = Math.round(
+        (long.quantity * oldLev + remaining * lev) / totalQty,
+      );
       positions = putPosition(
         positions,
         applyStops(
-          { ...long, quantity: totalQty, avgEntry },
+          { ...long, quantity: totalQty, avgEntry, leverage: avgLev },
           opts?.stopLoss,
           opts?.takeProfit,
         ),
@@ -252,7 +287,7 @@ export function executeBuy(
       positions = putPosition(
         positions,
         applyStops(
-          makePosition(sym, 'long', remaining, fillAsk),
+          makePosition(sym, 'long', remaining, fillAsk, lev),
           opts?.stopLoss,
           opts?.takeProfit,
         ),
@@ -298,6 +333,10 @@ export function executeSell(
   if (opts?.marketClosed) return { portfolio, error: opts.marketClosed };
 
   const sym = symbol.toUpperCase();
+  if (shouldMerge(opts) && availableLongQuantity(portfolio, sym) < quantity) {
+    return { portfolio, error: BIST_SHORT_SELL_DISABLED_ERROR };
+  }
+
   const fillBid = opts?.fillPrice ?? bid;
   let balance = portfolio.balance;
   let positions = [...portfolio.positions];
@@ -305,7 +344,8 @@ export function executeSell(
 
   // FX: netleşme/birleştirme yok — her zaman bağımsız yeni short pozisyon aç.
   if (!shouldMerge(opts)) {
-    const margin = requiredMargin(quantity, fillBid, cfg.leverage);
+    const lev = resolveTradeLeverage(opts);
+    const margin = requiredMargin(quantity, fillBid, lev);
     const commission = estimateCommission(quantity, fillBid, cfg.commissionRate);
     if (balance < margin + commission) {
       return { portfolio, error: 'Yetersiz bakiye' };
@@ -314,7 +354,7 @@ export function executeSell(
     positions = [
       ...positions,
       applyStops(
-        makePosition(sym, 'short', quantity, fillBid),
+        makePosition(sym, 'short', quantity, fillBid, lev),
         opts?.stopLoss,
         opts?.takeProfit,
       ),
@@ -347,7 +387,7 @@ export function executeSell(
     const marginRelease = requiredMargin(
       closeQty,
       existing.avgEntry,
-      cfg.leverage,
+      positionLeverage(existing),
     );
     balance += marginRelease + realized;
     balance = chargeCommission(balance, closeQty, fillBid, cfg.commissionRate);
@@ -373,7 +413,8 @@ export function executeSell(
   }
 
   if (remaining > 0) {
-    const margin = requiredMargin(remaining, fillBid, cfg.leverage);
+    const lev = resolveTradeLeverage(opts);
+    const margin = requiredMargin(remaining, fillBid, lev);
     const commission = estimateCommission(
       remaining,
       fillBid,
@@ -391,10 +432,14 @@ export function executeSell(
       const totalQty = short.quantity + remaining;
       const avgEntry =
         (short.avgEntry * short.quantity + fillBid * remaining) / totalQty;
+      const oldLev = positionLeverage(short);
+      const avgLev = Math.round(
+        (short.quantity * oldLev + remaining * lev) / totalQty,
+      );
       positions = putPosition(
         positions,
         applyStops(
-          { ...short, quantity: totalQty, avgEntry },
+          { ...short, quantity: totalQty, avgEntry, leverage: avgLev },
           opts?.stopLoss,
           opts?.takeProfit,
         ),
@@ -403,7 +448,7 @@ export function executeSell(
       positions = putPosition(
         positions,
         applyStops(
-          makePosition(sym, 'short', remaining, fillBid),
+          makePosition(sym, 'short', remaining, fillBid, lev),
           opts?.stopLoss,
           opts?.takeProfit,
         ),
@@ -444,6 +489,7 @@ export function closePositionById(
   marketClosed?: string,
   config?: EffectiveTradingSettings,
   pnlPrice?: number,
+  closeReason?: 'take_profit' | 'stop_loss',
 ): { portfolio: Portfolio; error?: string } {
   const cfg = config ?? DEFAULT_TRADING_SETTINGS;
   const pos = portfolio.positions.find((p) => p.id === positionId);
@@ -458,10 +504,21 @@ export function closePositionById(
   const realized = isLong
     ? (pnlSource - pos.avgEntry) * pos.quantity
     : (pos.avgEntry - pnlSource) * pos.quantity;
-  const marginRelease = requiredMargin(pos.quantity, pos.avgEntry, cfg.leverage);
+  const marginRelease = requiredMargin(
+    pos.quantity,
+    pos.avgEntry,
+    positionLeverage(pos),
+  );
 
   let balance = portfolio.balance + marginRelease + realized;
   balance = chargeCommission(balance, pos.quantity, fill, cfg.commissionRate);
+
+  const closeSuffix =
+    closeReason === 'take_profit'
+      ? ' · Kar al'
+      : closeReason === 'stop_loss'
+        ? ' · Zarar durdur'
+        : '';
 
   const positions = removePosition(portfolio.positions, positionId);
   const history: Trade[] = [
@@ -473,7 +530,7 @@ export function closePositionById(
       price: fill,
       realizedPnl: realized,
       at: new Date().toISOString(),
-      note: isLong ? 'Long kapat' : 'Short kapat',
+      note: `${isLong ? 'Long kapat' : 'Short kapat'}${closeSuffix}`,
     },
     ...portfolio.history,
   ];
@@ -516,6 +573,8 @@ export function placeLimitOrder(
     takeProfit?: number;
     marketClosed?: string;
     config?: EffectiveTradingSettings;
+    merge?: boolean;
+    leverage?: number;
   },
 ): { portfolio: Portfolio; error?: string } {
   const cfg = opts?.config ?? DEFAULT_TRADING_SETTINGS;
@@ -524,14 +583,24 @@ export function placeLimitOrder(
   if (limitPrice <= 0) return { portfolio, error: 'Geçerli bir fiyat girin' };
   if (opts?.marketClosed) return { portfolio, error: opts.marketClosed };
 
+  const sym = symbol.toUpperCase();
+  if (
+    side === 'sell' &&
+    (opts?.merge ?? true) &&
+    availableLongQuantity(portfolio, sym, true) < quantity
+  ) {
+    return { portfolio, error: BIST_SHORT_SELL_DISABLED_ERROR };
+  }
+
   const order: PendingOrder = {
     id: uid(),
-    symbol: symbol.toUpperCase(),
+    symbol: sym,
     side,
     quantity,
     limitPrice,
     stopLoss: opts?.stopLoss,
     takeProfit: opts?.takeProfit,
+    leverage: resolveTradeLeverage(opts),
     createdAt: new Date().toISOString(),
   };
 
@@ -601,6 +670,10 @@ function checkStopTake(
     }
     if (!trigger) continue;
 
+    const closeReason: 'take_profit' | 'stop_loss' = tpHit
+      ? 'take_profit'
+      : 'stop_loss';
+
     // TP ile kapanışta kâr, tanımlı TP fiyatından hesaplanır; kayda geçen
     // işlem fiyatı yine gerçek piyasa fiyatı olur.
     const tpPrice = tpHit ? pos.takeProfit! : undefined;
@@ -612,6 +685,7 @@ function checkStopTake(
       undefined,
       config,
       tpPrice,
+      closeReason,
     );
     if (!res.error) {
       next = res.portfolio;
@@ -679,6 +753,7 @@ function processPendingOrders(
             takeProfit: order.takeProfit,
             config,
             merge,
+            leverage: order.leverage,
           })
         : executeSell(next, sym, order.quantity, bid, ask, {
             fillPrice,
@@ -686,6 +761,7 @@ function processPendingOrders(
             takeProfit: order.takeProfit,
             config,
             merge,
+            leverage: order.leverage,
           });
 
     if (result.error) {

@@ -78,6 +78,10 @@ export function Sidebar() {
   const canDashboard = canAccess(user, PERMS.DASHBOARD_READ);
   const canMembersRead = canAccess(user, PERMS.MEMBERS_READ);
   const canMembersWrite = canAccess(user, PERMS.MEMBERS_WRITE);
+  const canMemberNotificationsSend = canAccess(
+    user,
+    PERMS.MEMBER_NOTIFICATIONS_SEND,
+  );
   const canUsersRead = canAccess(user, PERMS.USERS_READ);
   const canUsersWrite = canAccess(user, PERMS.USERS_WRITE);
   const canRolesRead = canAccess(user, PERMS.ROLES_READ);
@@ -117,6 +121,9 @@ export function Sidebar() {
     ...(canMembersWrite
       ? [{ href: '/panel/members/create', label: 'Yeni müşteri' }]
       : []),
+    ...(canMemberNotificationsSend
+      ? [{ href: '/panel/member-notifications', label: 'Müşteri bildirimleri' }]
+      : []),
   ];
 
   const userItems: NavItem[] = [
@@ -153,7 +160,7 @@ export function Sidebar() {
     ...(canCreditRead
       ? [{ href: '/panel/credit', label: 'Kredi talepleri' }]
       : []),
-    ...(canBonusRead ? [{ href: '/panel/bonus', label: 'Bonuslar' }] : []),
+    ...(canBonusRead ? [{ href: '/panel/bonus', label: 'Kampanyalar' }] : []),
     ...(canBanksRead ? [{ href: '/panel/banks', label: 'Bankalar' }] : []),
     ...(canBankAccountsRead
       ? [{ href: '/panel/bank-accounts', label: 'Banka hesapları' }]

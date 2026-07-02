@@ -28,7 +28,10 @@ export class PermissionsGuard implements CanActivate {
 
     const ok = await this.rbac.hasAnyPermission(userId, required);
     if (!ok) {
-      throw new ForbiddenException('Bu işlem için yetkiniz yok');
+      const isAdmin = await this.rbac.hasAdminRole(userId);
+      if (!isAdmin) {
+        throw new ForbiddenException('Bu işlem için yetkiniz yok');
+      }
     }
     return true;
   }

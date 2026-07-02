@@ -8,7 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RbacService } from '../../rbac/rbac.service';
 import { TradingConfigService } from '../../trading/trading-config.service';
 import { PortfolioEventsService } from '../../trading/portfolio-events.service';
-import { requiredMargin } from '../../trading/trading-config.types';
+import { positionLeverage, requiredMargin } from '../../trading/trading-config.types';
 
 function toNum(v: unknown): number {
   if (v == null) return 0;
@@ -56,21 +56,21 @@ export class PanelWalletService {
       side: string;
       quantity: unknown;
       avgEntry: unknown;
+      leverage?: number | null;
     }[],
-    leverage: number,
   ) {
     return positions.map((p) => {
       const quantity = toNum(p.quantity);
       const avgEntry = toNum(p.avgEntry);
-      const marginUsed = roundMoney(
-        requiredMargin(quantity, avgEntry, leverage),
-      );
+      const lev = positionLeverage({ leverage: p.leverage ?? undefined });
+      const marginUsed = roundMoney(requiredMargin(quantity, avgEntry, lev));
       return {
         id: p.id,
         symbol: p.symbol,
         side: p.side,
         quantity,
         avgEntry,
+        leverage: lev,
         marginUsed,
       };
     });
@@ -134,6 +134,7 @@ export class PanelWalletService {
                 side: true,
                 quantity: true,
                 avgEntry: true,
+                leverage: true,
               },
             },
           },
@@ -146,7 +147,7 @@ export class PanelWalletService {
     );
     const balance = account ? toNum(account.balance) : 0;
     const positions = account
-      ? this.calcPositionsMargin(account.positions, settings.leverage)
+      ? this.calcPositionsMargin(account.positions)
       : [];
     const marginUsed = roundMoney(
       positions.reduce((sum, p) => sum + p.marginUsed, 0),
@@ -218,7 +219,8 @@ export class PanelWalletService {
       balance,
       marginUsed,
       freeBalance,
-      leverage: settings.leverage,
+      leverage: settings.fixedLeverage,
+      leverageOptions: settings.leverageOptions,
       openPositions: positions.length,
       positions,
       finance: {
@@ -335,6 +337,7 @@ export class PanelWalletService {
                     side: true,
                     quantity: true,
                     avgEntry: true,
+                    leverage: true,
                   },
                 },
               },
@@ -377,15 +380,8 @@ export class PanelWalletService {
         continue;
       }
 
-      const settings = await this.tradingConfig.getEffectiveSettings(
-        m.userId,
-        businessId,
-      );
       const balance = toNum(account.balance);
-      const positions = this.calcPositionsMargin(
-        account.positions,
-        settings.leverage,
-      );
+      const positions = this.calcPositionsMargin(account.positions);
       const marginUsed = roundMoney(
         positions.reduce((sum, p) => sum + p.marginUsed, 0),
       );

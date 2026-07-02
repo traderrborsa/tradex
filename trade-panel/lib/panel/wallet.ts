@@ -18,7 +18,8 @@ export interface MemberWalletResponse {
   balance: number;
   marginUsed: number;
   freeBalance: number;
-  leverage: number;
+  leverage: number | null;
+  leverageOptions: number[];
   openPositions: number;
   positions: MemberWalletPosition[];
   finance: {

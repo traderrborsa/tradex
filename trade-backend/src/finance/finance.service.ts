@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TradingAccountService } from '../trading/trading-account.service';
 import { allocateDisplayId } from '../trading/transaction-display-id';
 import { PanelNotificationsService } from '../panel/notifications/notifications.service';
+import { MemberNotificationsService } from '../member-notifications/member-notifications.service';
 import { FinanceEventsService } from '../panel/finance/finance-events.service';
 import { UploadsService, type UploadedFilePayload } from '../uploads/uploads.service';
 import { toPublicUploadUrl } from '../uploads/uploads-url';
@@ -44,6 +45,7 @@ export class FinanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: PanelNotificationsService,
+    private readonly memberNotifications: MemberNotificationsService,
     private readonly uploads: UploadsService,
     private readonly verification: VerificationService,
     private readonly financeEvents: FinanceEventsService,
@@ -300,6 +302,21 @@ export class FinanceService {
       throw new BadRequestException('Geçerli işletme bağlamı gerekli');
     }
 
+    const pendingDeposit = await this.prisma.financeRequest.findFirst({
+      where: {
+        userId,
+        businessId: ctx.businessId,
+        type: 'deposit',
+        status: 'pending',
+      },
+      select: { id: true },
+    });
+    if (pendingDeposit) {
+      throw new BadRequestException(
+        'Bekleyen bir para yatırma talebiniz var. Yeni talep oluşturmadan önce mevcut talebinizin onaylanmasını bekleyin.',
+      );
+    }
+
     const bankAccount = await this.prisma.depositBankAccount.findFirst({
       where: {
         id: body.depositBankAccountId,
@@ -355,6 +372,22 @@ export class FinanceService {
     this.financeEvents.notifyFinanceChanged();
 
     return this.serializeRow(row);
+  }
+
+  async listForMember(userId: string, businessId?: string) {
+    const ctx = await this.verification.resolveRequirementsContext(
+      userId,
+      businessId,
+    );
+    const rows = await this.prisma.financeRequest.findMany({
+      where: {
+        userId,
+        ...(ctx.businessId ? { businessId: ctx.businessId } : {}),
+      },
+      include: this.rowInclude(),
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => this.serializeRow(r));
   }
 
   async listForPanel(
@@ -541,7 +574,83 @@ export class FinanceService {
       );
     }
 
+    if (body.status != null && body.status !== existing.status) {
+      await this.notifyMemberFinanceStatus(existing, body.status, nextAmount);
+    }
+
     return this.serializeRow(row);
+  }
+
+  private async notifyMemberFinanceStatus(
+    existing: {
+      id: string;
+      userId: string;
+      businessId: string;
+      type: string;
+      amount: unknown;
+    },
+    status: FinanceRequestStatus,
+    amount: number,
+  ) {
+    if (status === 'pending') return;
+
+    const formatted = amount.toLocaleString('tr-TR');
+    const isDeposit = existing.type === 'deposit';
+    const isWithdrawal = existing.type === 'withdrawal';
+
+    if (status === 'approved' && isDeposit) {
+      await this.memberNotifications.create({
+        userId: existing.userId,
+        businessId: existing.businessId,
+        type: 'finance_deposit_approved',
+        title: 'Para yatırma onaylandı',
+        message: `${formatted} ₺ yatırım talebiniz onaylandı ve hesabınıza eklendi.`,
+        href: '/requests',
+        data: { requestId: existing.id, amount },
+      });
+      return;
+    }
+
+    if (status === 'rejected' && isDeposit) {
+      await this.memberNotifications.create({
+        userId: existing.userId,
+        businessId: existing.businessId,
+        type: 'finance_deposit_rejected',
+        title: 'Para yatırma reddedildi',
+        message: `${formatted} ₺ yatırım talebiniz reddedildi.`,
+        href: '/requests',
+        data: { requestId: existing.id, amount },
+      });
+      return;
+    }
+
+    if (status === 'approved' && isWithdrawal) {
+      await this.memberNotifications.create({
+        userId: existing.userId,
+        businessId: existing.businessId,
+        type: 'finance_withdrawal_approved',
+        title: 'Para çekme onaylandı',
+        message: `${formatted} ₺ çekim talebiniz onaylandı.`,
+        href: '/requests',
+        data: { requestId: existing.id, amount },
+      });
+      return;
+    }
+
+    if (
+      (status === 'rejected' || status === 'cancelled') &&
+      isWithdrawal
+    ) {
+      await this.memberNotifications.create({
+        userId: existing.userId,
+        businessId: existing.businessId,
+        type: 'finance_withdrawal_rejected',
+        title: 'Para çekme reddedildi',
+        message: `${formatted} ₺ çekim talebiniz reddedildi.`,
+        href: '/requests',
+        data: { requestId: existing.id, amount },
+      });
+    }
   }
 
   async deleteForPanel(id: string, userWhere: Prisma.UserWhereInput) {

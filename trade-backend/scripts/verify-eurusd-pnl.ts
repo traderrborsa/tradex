@@ -88,7 +88,7 @@ async function main() {
 
   const bal0 = Number(account!.balance);
 
-  const marginOpen = requiredMargin(qty, ask, settings.leverage);
+  const marginOpen = requiredMargin(qty, ask, settings.leverageOptions[0] ?? 1);
   const commOpen = estimateCommissionFee(qty, ask, settings);
   const expectedBalAfterOpen = bal0 - marginOpen - commOpen;
 
@@ -140,7 +140,7 @@ async function main() {
   console.log({ closeBid, unrealizedGross: round(unrealized) });
 
   const grossRealized = (closeBid - avgEntry) * qty;
-  const marginRelease = requiredMargin(qty, avgEntry, settings.leverage);
+  const marginRelease = requiredMargin(qty, avgEntry, pos.leverage ?? 1);
   const commClose = estimateCommissionFee(qty, closeBid, settings);
   const expectedBalAfterClose = bal1 + marginRelease + grossRealized - commClose;
   const expectedNet = netPnl(grossRealized, 0, commOpen + commClose);

@@ -1,9 +1,7 @@
 import { getToken } from './auth-storage';
+import { resolveWsUrlWithToken } from './ws-url';
 
 type ServerMessage = { type: 'connected' } | { type: 'pong' };
-
-const WS_URL =
-  process.env.NEXT_PUBLIC_PRESENCE_WS_URL ?? 'ws://localhost:3001/ws/presence';
 
 let socket: WebSocket | null = null;
 let connectPromise: Promise<WebSocket> | null = null;
@@ -12,14 +10,11 @@ let pingTimer: ReturnType<typeof setInterval> | null = null;
 let refCount = 0;
 
 function getWsUrl(token: string) {
-  if (typeof window === 'undefined') return WS_URL;
-  const env = process.env.NEXT_PUBLIC_PRESENCE_WS_URL;
-  const base =
-    env ??
-    `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:3001/ws/presence`;
-  const url = new URL(base);
-  url.searchParams.set('token', token);
-  return url.toString();
+  return resolveWsUrlWithToken(
+    '/ws/presence',
+    token,
+    process.env.NEXT_PUBLIC_PRESENCE_WS_URL,
+  );
 }
 
 function scheduleReconnect(token: string) {

@@ -8,12 +8,11 @@ import {
 } from '@nestjs/websockets';
 import type { Server, WebSocket } from 'ws';
 import { PresenceEventsService } from './presence-events.service';
+import { CORS_ORIGINS } from '../cors-origins';
 
 @WebSocketGateway({
   path: '/ws/panel/presence',
-  cors: {
-    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002',
-  },
+  cors: { origin: CORS_ORIGINS },
 })
 export class PanelPresenceGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit

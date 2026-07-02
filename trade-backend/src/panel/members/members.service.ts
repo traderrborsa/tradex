@@ -17,7 +17,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MEMBER_ROLE_NAME } from '../../rbac/permissions.constants';
 import { RbacService } from '../../rbac/rbac.service';
 import { TradingConfigService } from '../../trading/trading-config.service';
-import { requiredMargin } from '../../trading/trading-config.types';
+import { positionLeverage, requiredMargin } from '../../trading/trading-config.types';
 import { VerificationService } from '../../verification/verification.service';
 import type { CreatePanelMemberDto } from './dto/member.dto';
 
@@ -207,7 +207,7 @@ export class PanelMembersService {
                 businessId: true,
                 balance: true,
                 positions: {
-                  select: { side: true, quantity: true, avgEntry: true },
+                  select: { side: true, quantity: true, avgEntry: true, leverage: true },
                 },
               },
             },
@@ -227,17 +227,12 @@ export class PanelMembersService {
           (a) => a.businessId === m.businessId,
         );
         const balance = toNum(account?.balance);
-        const leverageBusinessId = businessId ?? m.businessId;
-        const settings = await this.tradingConfig.getEffectiveSettings(
-          m.user.id,
-          leverageBusinessId,
-        );
         let marginUsed = 0;
         for (const p of account?.positions ?? []) {
           marginUsed += requiredMargin(
             toNum(p.quantity),
             toNum(p.avgEntry),
-            settings.leverage,
+            positionLeverage({ leverage: p.leverage ?? undefined }),
           );
         }
         marginUsed = Math.round(marginUsed * 100) / 100;

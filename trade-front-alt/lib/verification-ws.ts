@@ -1,5 +1,6 @@
 import { getToken } from './auth-storage';
 import { resolveActiveBusinessId } from './business';
+import { resolveWsUrlWithToken } from './ws-url';
 
 export type VerificationUpdatedMessage = {
   type: 'verification_updated';
@@ -14,10 +15,6 @@ type ServerMessage =
   | { type: 'pong' }
   | VerificationUpdatedMessage;
 
-const WS_URL =
-  process.env.NEXT_PUBLIC_VERIFICATION_WS_URL ??
-  'ws://localhost:3001/ws/verification';
-
 let socket: WebSocket | null = null;
 let connectPromise: Promise<WebSocket> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -26,14 +23,11 @@ let refCount = 0;
 const listeners = new Set<(msg: VerificationUpdatedMessage) => void>();
 
 function getWsUrl(token: string) {
-  if (typeof window === 'undefined') return WS_URL;
-  const env = process.env.NEXT_PUBLIC_VERIFICATION_WS_URL;
-  const base =
-    env ??
-    `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:3001/ws/verification`;
-  const url = new URL(base);
-  url.searchParams.set('token', token);
-  return url.toString();
+  return resolveWsUrlWithToken(
+    '/ws/verification',
+    token,
+    process.env.NEXT_PUBLIC_VERIFICATION_WS_URL,
+  );
 }
 
 function dispatchVerification(msg: VerificationUpdatedMessage) {

@@ -6,13 +6,20 @@ import { useState } from 'react';
 import { BrandLogo } from '@/components/BrandLogo';
 import { TwoFactorOptionalStep } from '@/components/TwoFactorOptionalStep';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatPhoneInput, normalizePhone, PHONE_MASK_HINT } from '@/lib/phone';
+import {
+  COUNTRY_DIALS,
+  DEFAULT_DIAL,
+  formatNationalInput,
+  PHONE_MASK_HINT,
+  toE164,
+} from '@/lib/phone';
 import { RegisterEvrakStep } from '@/components/RegisterEvrakStep';
 import {
   confirmEmailCode,
   sendEmailVerificationCode,
 } from '@/lib/profile';
 import {
+  sanitizeNameInput,
   validateRegisterForm,
   validateRegisterFormStep,
 } from '@/lib/register';
@@ -20,6 +27,116 @@ import { normalizeTcKimlikNo } from '@/lib/tc-kimlik';
 
 const INPUT =
   'w-full rounded-lg border border-input-border bg-input px-3 py-2.5 text-foreground placeholder:text-subtle focus:border-foreground focus:outline-none';
+
+const MONTH_NAMES = [
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+];
+
+function BirthDateField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [yy, mm, dd] = value ? value.split('-') : ['', '', ''];
+  const currentYear = new Date().getFullYear();
+  const years: number[] = [];
+  for (let y = currentYear - 18; y >= currentYear - 100; y -= 1) years.push(y);
+  const days = Array.from({ length: 31 }, (_, i) => i + 1);
+
+  const emit = (d: string, m: string, y: string) => {
+    onChange(d && m && y ? `${y}-${m}-${d}` : '');
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <select
+        aria-label="Gün"
+        className={`${INPUT} cursor-pointer`}
+        value={dd ?? ''}
+        onChange={(e) => emit(e.target.value, mm ?? '', yy ?? '')}
+      >
+        <option value="">Gün</option>
+        {days.map((d) => {
+          const v = String(d).padStart(2, '0');
+          return (
+            <option key={v} value={v}>
+              {d}
+            </option>
+          );
+        })}
+      </select>
+      <select
+        aria-label="Ay"
+        className={`${INPUT} cursor-pointer`}
+        value={mm ?? ''}
+        onChange={(e) => emit(dd ?? '', e.target.value, yy ?? '')}
+      >
+        <option value="">Ay</option>
+        {MONTH_NAMES.map((name, i) => {
+          const v = String(i + 1).padStart(2, '0');
+          return (
+            <option key={v} value={v}>
+              {name}
+            </option>
+          );
+        })}
+      </select>
+      <select
+        aria-label="Yıl"
+        className={`${INPUT} cursor-pointer`}
+        value={yy ?? ''}
+        onChange={(e) => emit(dd ?? '', mm ?? '', e.target.value)}
+      >
+        <option value="">Yıl</option>
+        {years.map((y) => (
+          <option key={y} value={String(y)}>
+            {y}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function PhoneField({
+  dial,
+  onDialChange,
+  value,
+  onChange,
+}: {
+  dial: string;
+  onDialChange: (v: string) => void;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      <select
+        aria-label="Ülke kodu"
+        className={`${INPUT} w-auto shrink-0 cursor-pointer`}
+        value={dial}
+        onChange={(e) => onDialChange(e.target.value)}
+      >
+        {COUNTRY_DIALS.map((c) => (
+          <option key={c.iso} value={c.dial}>
+            {c.flag} +{c.dial}
+          </option>
+        ))}
+      </select>
+      <input
+        className={INPUT}
+        type="tel"
+        inputMode="numeric"
+        placeholder={dial === DEFAULT_DIAL ? PHONE_MASK_HINT : 'Telefon numarası'}
+        value={value}
+        onChange={(e) => onChange(formatNationalInput(dial, e.target.value))}
+      />
+    </div>
+  );
+}
 
 const STEPS = [
   'Ad Soyad',
@@ -42,6 +159,7 @@ export function RegisterWizard() {
   const [referenceNumber, setReferenceNumber] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneDial, setPhoneDial] = useState(DEFAULT_DIAL);
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [emailCode, setEmailCode] = useState('');
@@ -58,7 +176,7 @@ export function RegisterWizard() {
     birthDate,
     referenceNumber,
     email,
-    phone,
+    phone: toE164(phoneDial, phone),
     password,
     passwordConfirm,
   };
@@ -103,7 +221,7 @@ export function RegisterWizard() {
       birthDate,
       referenceNumber: referenceNumber.trim() || undefined,
       email,
-      phone: normalizePhone(phone),
+      phone: toE164(phoneDial, phone),
       password,
     });
     setSubmitting(false);
@@ -176,14 +294,14 @@ export function RegisterWizard() {
                 className={INPUT}
                 placeholder="Ad"
                 value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                onChange={(e) => setFirstName(sanitizeNameInput(e.target.value))}
                 autoFocus
               />
               <input
                 className={INPUT}
                 placeholder="Soyad"
                 value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
+                onChange={(e) => setLastName(sanitizeNameInput(e.target.value))}
               />
               <button
                 type="button"
@@ -210,12 +328,7 @@ export function RegisterWizard() {
               />
               <div>
                 <label className="mb-1.5 block text-sm text-muted">Doğum tarihi</label>
-                <input
-                  className={INPUT}
-                  type="date"
-                  value={birthDate}
-                  onChange={(e) => setBirthDate(e.target.value)}
-                />
+                <BirthDateField value={birthDate} onChange={setBirthDate} />
               </div>
               <div className="flex gap-3">
                 <button
@@ -252,12 +365,14 @@ export function RegisterWizard() {
                 onChange={(e) => setEmail(e.target.value)}
                 autoFocus
               />
-              <input
-                className={INPUT}
-                type="tel"
-                placeholder={PHONE_MASK_HINT}
+              <PhoneField
+                dial={phoneDial}
+                onDialChange={(d) => {
+                  setPhoneDial(d);
+                  setPhone((p) => formatNationalInput(d, p));
+                }}
                 value={phone}
-                onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+                onChange={setPhone}
               />
               <div className="flex gap-3">
                 <button

@@ -8,11 +8,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
 import { TransactionsEventsService } from '../panel/transactions/transactions-events.service';
 import { PanelNotificationsService } from '../panel/notifications/notifications.service';
+import { MemberNotificationsService } from '../member-notifications/member-notifications.service';
 import { getTradingBlockReason } from './market-hours';
 import { TradingAccountService } from './trading-account.service';
 import { TradingConfigService } from './trading-config.service';
 import { VerificationService } from '../verification/verification.service';
 import type { EffectiveTradingSettings } from './trading-config.types';
+import { validateOrderLeverage } from './trading-config.types';
 import { PortfolioEventsService } from './portfolio-events.service';
 import { enrichTradeForMember, buildTradeOpenIndex } from './trade-history-pnl';
 import {
@@ -34,6 +36,10 @@ function toNum(v: unknown): number {
   return typeof v === 'number' ? v : Number(v);
 }
 
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 function sideLabelTr(side: string) {
   if (side === 'long' || side === 'buy') return 'Alış';
   if (side === 'short' || side === 'sell') return 'Satış';
@@ -48,6 +54,7 @@ export class TradingService {
     private readonly rbac: RbacService,
     private readonly events: TransactionsEventsService,
     private readonly notifications: PanelNotificationsService,
+    private readonly memberNotifications: MemberNotificationsService,
     private readonly tradingConfig: TradingConfigService,
     private readonly verification: VerificationService,
     private readonly accounts: TradingAccountService,
@@ -111,17 +118,42 @@ export class TradingService {
       account.userId,
       account.businessId,
     );
+    const [bonusAgg, creditAgg] = await Promise.all([
+      this.prisma.bonusRequest.aggregate({
+        where: { accountId, status: 'approved' },
+        _sum: { amount: true },
+      }),
+      this.prisma.creditRequest.aggregate({
+        where: {
+          userId: account.userId,
+          businessId: account.businessId,
+          status: 'approved',
+        },
+        _sum: { amount: true },
+      }),
+    ]);
     const openIndex = buildTradeOpenIndex(
       account.trades.map((t) => ({
         accountId,
         symbol: t.symbol,
         executedAt: t.executedAt,
         note: t.note,
+        price: t.price,
       })),
     );
 
+    const balance = toNum(account.balance);
+    const bonusIncome = roundMoney(toNum(bonusAgg._sum.amount));
+    const creditIncome = roundMoney(toNum(creditAgg._sum.amount));
+    const cashBalance = roundMoney(Math.max(0, balance - bonusIncome));
+    const totalBalance = roundMoney(cashBalance + bonusIncome + creditIncome);
+
     return {
-      balance: toNum(account.balance),
+      balance,
+      bonusIncome,
+      creditIncome,
+      cashBalance,
+      totalBalance,
       positions: account.positions.map((p) => ({
         id: p.id,
         symbol: p.symbol,
@@ -131,6 +163,7 @@ export class TradingService {
         openedAt: p.openedAt.toISOString(),
         stopLoss: p.stopLoss != null ? toNum(p.stopLoss) : undefined,
         takeProfit: p.takeProfit != null ? toNum(p.takeProfit) : undefined,
+        leverage: p.leverage ?? 1,
       })),
       pendingOrders: account.pendingOrders.map((o) => ({
         id: o.id,
@@ -140,6 +173,7 @@ export class TradingService {
         limitPrice: toNum(o.limitPrice),
         stopLoss: o.stopLoss != null ? toNum(o.stopLoss) : undefined,
         takeProfit: o.takeProfit != null ? toNum(o.takeProfit) : undefined,
+        leverage: o.leverage ?? 1,
         createdAt: o.createdAt.toISOString(),
       })),
       history: account.trades.map((t) =>
@@ -190,6 +224,7 @@ export class TradingService {
             avgEntry: p.avgEntry,
             stopLoss: p.stopLoss ?? null,
             takeProfit: p.takeProfit ?? null,
+            leverage: p.leverage ?? 1,
             openedAt: new Date(p.openedAt),
             displayId,
             openedByUserId,
@@ -222,6 +257,7 @@ export class TradingService {
             limitPrice: o.limitPrice,
             stopLoss: o.stopLoss ?? null,
             takeProfit: o.takeProfit ?? null,
+            leverage: o.leverage ?? 1,
             createdAt: new Date(o.createdAt),
             displayId,
             openedByUserId,
@@ -249,6 +285,7 @@ export class TradingService {
     });
 
     await this.emitPortfolioNotifications(accountId, before, after, options);
+    await this.emitMemberNotifications(accountId, before, after, options);
     this.events.notifyTransactionsChanged();
     await this.emitPortfolioBalanceIfChanged(accountId, before, after, options);
   }
@@ -357,6 +394,86 @@ export class TradingService {
     }
   }
 
+  private async emitMemberNotifications(
+    accountId: string,
+    before: Portfolio,
+    after: Portfolio,
+    options?: { openedByUserId?: string; businessId?: string },
+  ) {
+    const account = await this.prisma.tradingAccount.findUnique({
+      where: { id: accountId },
+      select: { userId: true, businessId: true },
+    });
+    if (!account) return;
+
+    const businessId = options?.businessId ?? account.businessId;
+    const userId = account.userId;
+
+    const beforePosIds = new Set(before.positions.map((p) => p.id));
+    const beforeTradeIds = new Set(before.history.map((t) => t.id));
+
+    for (const p of after.positions) {
+      if (!beforePosIds.has(p.id)) {
+        const isBuy = p.side === 'long';
+        await this.memberNotifications.create({
+          userId,
+          businessId,
+          type: isBuy ? 'trade_buy' : 'trade_sell',
+          title: isBuy ? 'Alım işlemi gerçekleşti' : 'Satım işlemi gerçekleşti',
+          message: `${sideLabelTr(p.side)} ${p.quantity} lot ${p.symbol}`,
+          href: '/portfolio',
+          data: {
+            symbol: p.symbol,
+            side: p.side,
+            quantity: p.quantity,
+            positionId: p.id,
+          },
+        });
+      }
+    }
+
+    for (const t of after.history) {
+      if (!beforeTradeIds.has(t.id) && isCloseTradeNote(t.note)) {
+        const pnl =
+          t.realizedPnl >= 0
+            ? `+${t.realizedPnl.toFixed(2)}`
+            : t.realizedPnl.toFixed(2);
+
+        if (t.note?.includes('Kar al')) {
+          await this.memberNotifications.create({
+            userId,
+            businessId,
+            type: 'take_profit',
+            title: 'Kar al tetiklendi',
+            message: `${t.symbol} pozisyonunuz kar al seviyesinde kapandı · K/Z: ${pnl} ₺`,
+            href: '/portfolio',
+            data: { symbol: t.symbol, tradeId: t.id, realizedPnl: t.realizedPnl },
+          });
+        } else if (t.note?.includes('Zarar durdur')) {
+          await this.memberNotifications.create({
+            userId,
+            businessId,
+            type: 'stop_loss',
+            title: 'Zarar durdur tetiklendi',
+            message: `${t.symbol} pozisyonunuz zarar durdur seviyesinde kapandı · K/Z: ${pnl} ₺`,
+            href: '/portfolio',
+            data: { symbol: t.symbol, tradeId: t.id, realizedPnl: t.realizedPnl },
+          });
+        } else {
+          await this.memberNotifications.create({
+            userId,
+            businessId,
+            type: 'position_closed',
+            title: 'Pozisyon kapandı',
+            message: `${t.symbol} pozisyonunuz kapatıldı · K/Z: ${pnl} ₺`,
+            href: '/portfolio',
+            data: { symbol: t.symbol, tradeId: t.id, realizedPnl: t.realizedPnl },
+          });
+        }
+      }
+    }
+  }
+
   private async apply(
     userId: string,
     fn: (portfolio: Portfolio) => { portfolio: Portfolio; error?: string },
@@ -418,6 +535,7 @@ export class TradingService {
               takeProfit: body.takeProfit,
               marketClosed: undefined,
               config,
+              merge: this.shouldMerge(body.symbol),
             },
           ),
         opts,
@@ -598,11 +716,18 @@ export class TradingService {
       ask: number;
       stopLoss?: number;
       takeProfit?: number;
+      leverage?: number;
       businessId?: string;
     },
   ) {
     await this.verification.assertCanTrade(userId, body.businessId);
     const config = await this.loadEffectiveConfig(userId, body.businessId);
+    let orderLeverage: number;
+    try {
+      orderLeverage = validateOrderLeverage(body.leverage, config);
+    } catch {
+      throw new BadRequestException('Geçersiz kaldıraç');
+    }
     const { isAdmin } = await this.getUserContext(userId, body.businessId);
     const closed = this.marketClosed(body.symbol, isAdmin);
     const opts = {
@@ -611,6 +736,7 @@ export class TradingService {
       marketClosed: closed,
       config,
       merge: this.shouldMerge(body.symbol),
+      leverage: orderLeverage,
     };
     return this.apply(
       userId,
@@ -645,11 +771,18 @@ export class TradingService {
       limitPrice: number;
       stopLoss?: number;
       takeProfit?: number;
+      leverage?: number;
       businessId?: string;
     },
   ) {
     await this.verification.assertCanTrade(userId, body.businessId);
     const config = await this.loadEffectiveConfig(userId, body.businessId);
+    let orderLeverage: number;
+    try {
+      orderLeverage = validateOrderLeverage(body.leverage, config);
+    } catch {
+      throw new BadRequestException('Geçersiz kaldıraç');
+    }
     const { isAdmin } = await this.getUserContext(userId, body.businessId);
     const closed = this.marketClosed(body.symbol, isAdmin);
     return this.apply(
@@ -666,6 +799,8 @@ export class TradingService {
             takeProfit: body.takeProfit,
             marketClosed: closed,
             config,
+            merge: this.shouldMerge(body.symbol),
+            leverage: orderLeverage,
           },
         ),
       { businessId: body.businessId },

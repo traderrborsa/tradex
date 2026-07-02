@@ -181,6 +181,7 @@ export function apiMarketOrder(body: {
   ask: number;
   stopLoss?: number;
   takeProfit?: number;
+  leverage?: number;
 }) {
   return apiFetch<Portfolio>('/trading/market', {
     method: 'POST',
@@ -195,6 +196,7 @@ export function apiLimitOrder(body: {
   limitPrice: number;
   stopLoss?: number;
   takeProfit?: number;
+  leverage?: number;
 }) {
   return apiFetch<Portfolio>('/trading/limit', {
     method: 'POST',
@@ -267,6 +269,36 @@ export function apiCreateWithdrawal(body: {
     method: 'POST',
     body: JSON.stringify(withBusinessId(body)),
   });
+}
+
+export type FinanceRequestType = 'deposit' | 'withdrawal';
+export type FinanceRequestStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled';
+
+export interface FinanceRequest {
+  id: string;
+  displayId: number | null;
+  type: FinanceRequestType;
+  status: FinanceRequestStatus;
+  amount: number;
+  iban: string | null;
+  bankName: string | null;
+  bankLogoUrl: string | null;
+  accountHolderName: string | null;
+  receiptUrl: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function apiFetchFinanceRequests() {
+  const businessId = resolveActiveBusinessId();
+  return apiFetch<FinanceRequest[]>(
+    `/finance/requests?businessId=${encodeURIComponent(businessId)}`,
+  );
 }
 
 export interface DepositBankOption {

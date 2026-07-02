@@ -10,13 +10,16 @@ import { formatTradeSide } from '@/lib/symbol-labels';
 import { getMarketStatus } from '@/lib/market-hours';
 import { getPendingOrders, getPosition, unrealizedPnl } from '@/lib/trading/engine';
 import { usePositionStopsControls } from '@/hooks/usePositionStopsControls';
+import { PositionStopPnl } from '@/components/PositionStopPnl';
 import {
   clampLot,
   estimateCommission,
   formatSwap,
   getSwapRates,
+  positionLeverage,
   requiredMargin,
 } from '@/lib/trading/margin';
+import { activeLeverage } from '@/lib/trading-config';
 import { formatMoney } from '@/lib/format-money';
 import { formatEditableMarketPrice, formatMarketPrice } from '@/lib/price';
 import type { Tick } from '@/lib/types';
@@ -30,6 +33,8 @@ interface Props {
 
 const INPUT_CLASS =
   'rounded-lg border border-input-border bg-input px-3 py-2 font-mono text-foreground placeholder:text-subtle focus:border-foreground focus:outline-none';
+const BIST_SHORT_SELL_MESSAGE =
+  'BIST hisselerinde açığa satış kapalı. Yalnızca mevcut long pozisyonunuzu satabilirsiniz.';
 
 function isDecimalInput(value: string) {
   return value === '' || /^\d*\.?\d*$/.test(value);
@@ -55,7 +60,11 @@ export function TradePanel({ symbol, tick }: Props) {
   const { user } = useAuth();
   const { settings, hasMemberOverrides } = useTradingConfig();
   const minLot = settings.minLot;
-  const leverage = settings.leverage;
+  const leverageOptions = settings.leverageOptions;
+  const fixedLeverage = settings.fixedLeverage;
+  const defaultLeverage = leverageOptions[0] ?? 1;
+  const [selectedLeverage, setSelectedLeverage] = useState(defaultLeverage);
+  const activeLeverageValue = activeLeverage(settings, selectedLeverage);
 
   const [tab, setTab] = useState<Tab>('market');
   const [volume, setVolume] = useState(minLot);
@@ -90,6 +99,13 @@ export function TradePanel({ symbol, tick }: Props) {
     setVolumeInput(minLot.toFixed(2));
   }, [minLot]);
 
+  useEffect(() => {
+    if (fixedLeverage != null) return;
+    if (!leverageOptions.includes(selectedLeverage)) {
+      setSelectedLeverage(defaultLeverage);
+    }
+  }, [leverageOptions, fixedLeverage, selectedLeverage, defaultLeverage]);
+
   const setVolumeSafe = (next: number) => {
     const clamped = clampLot(next, settings);
     setVolume(clamped);
@@ -113,14 +129,19 @@ export function TradePanel({ symbol, tick }: Props) {
   const swapShort = swapRates.short;
   const openPosMargin =
     openPos != null
-      ? requiredMargin(openPos.quantity, openPos.avgEntry, settings)
+      ? requiredMargin(
+          openPos.quantity,
+          openPos.avgEntry,
+          positionLeverage(openPos),
+        )
       : 0;
   const openPosPnl =
     openPos != null && bid > 0 && ask > 0
       ? unrealizedPnl(openPos, bid, ask)
       : null;
   const totalLockedMargin = portfolio.positions.reduce(
-    (sum, p) => sum + requiredMargin(p.quantity, p.avgEntry, settings),
+    (sum, p) =>
+      sum + requiredMargin(p.quantity, p.avgEntry, positionLeverage(p)),
     0,
   );
   const totalEquity =
@@ -133,8 +154,15 @@ export function TradePanel({ symbol, tick }: Props) {
   const tradingDisabled =
     (!marketStatus.open && !isAdmin(user)) ||
     user?.verification?.canTrade === false;
+  const isBist = marketStatus.kind === 'bist';
+  const bistSellDisabled =
+    isBist &&
+    (openPos?.side !== 'long' || volume > openPos.quantity);
   const activePrice = tab === 'market' ? (ask || mid) : limitPrice;
-  const margin = activePrice > 0 ? requiredMargin(volume, activePrice, settings) : 0;
+  const margin =
+    activePrice > 0
+      ? requiredMargin(volume, activePrice, activeLeverageValue)
+      : 0;
   const commission =
     activePrice > 0 ? estimateCommission(volume, activePrice, settings) : 0;
 
@@ -155,6 +183,10 @@ export function TradePanel({ symbol, tick }: Props) {
       flash(marketStatus.reason ?? 'Piyasa kapalı');
       return;
     }
+    if (side === 'sell' && bistSellDisabled) {
+      flash(BIST_SHORT_SELL_MESSAGE);
+      return;
+    }
     if (!tick || bid <= 0 || ask <= 0) {
       flash('Fiyat bekleniyor…');
       return;
@@ -163,10 +195,14 @@ export function TradePanel({ symbol, tick }: Props) {
     // düzenlemek içindir; yeni (ör. hedge) emre kopyalanırsa ters yön için
     // anında tetikleyip emri açılır açılmaz kapatabilir.
     const orderStops = stops.positionMode ? {} : stops.stopOpts();
+    const orderOpts = {
+      ...orderStops,
+      leverage: activeLeverageValue,
+    };
     const err =
       side === 'buy'
-        ? await buy(sym, volume, bid, ask, orderStops)
-        : await sell(sym, volume, bid, ask, orderStops);
+        ? await buy(sym, volume, bid, ask, orderOpts)
+        : await sell(sym, volume, bid, ask, orderOpts);
     flash(err ?? 'İşlem gerçekleşti');
   };
 
@@ -175,12 +211,19 @@ export function TradePanel({ symbol, tick }: Props) {
       flash(marketStatus.reason ?? 'Piyasa kapalı');
       return;
     }
+    if (side === 'sell' && bistSellDisabled) {
+      flash(BIST_SHORT_SELL_MESSAGE);
+      return;
+    }
     if (limitPrice <= 0) {
       flash('Geçerli bir fiyat girin');
       return;
     }
     const orderStops = stops.positionMode ? {} : stops.stopOpts();
-    const err = await placeLimit(sym, side, volume, limitPrice, orderStops);
+    const err = await placeLimit(sym, side, volume, limitPrice, {
+      ...orderStops,
+      leverage: activeLeverageValue,
+    });
     flash(err ?? 'Bekleyen emir oluşturuldu');
   };
 
@@ -188,15 +231,34 @@ export function TradePanel({ symbol, tick }: Props) {
   const buyLabel = tab === 'market' ? 'AL' : 'AL LİMİT';
   const sellDisplay = tab === 'market' ? bid : limitPrice;
   const buyDisplay = tab === 'market' ? ask : limitPrice;
+  const slTpEntryPrice = openPos?.avgEntry ?? activePrice;
+  const slTpQuantity = openPos?.quantity ?? volume;
+  const slTpSide = openPos?.side ?? 'long';
 
   return (
     <div className="flex h-full flex-col gap-4 rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-secondary">İşlem</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded bg-elevated px-2 py-0.5 font-mono text-xs text-foreground">
-            1:{leverage}
-          </span>
+          {fixedLeverage != null ? (
+            <span className="rounded bg-elevated px-2 py-0.5 font-mono text-xs text-foreground">
+              1:{fixedLeverage}
+            </span>
+          ) : (
+            <select
+              value={activeLeverageValue}
+              onChange={(e) => setSelectedLeverage(Number(e.target.value))}
+              disabled={tradingDisabled || !user}
+              className="rounded-lg border border-input-border bg-input px-2 py-0.5 font-mono text-xs text-foreground focus:border-foreground focus:outline-none"
+              aria-label="Kaldıraç"
+            >
+              {leverageOptions.map((lev) => (
+                <option key={lev} value={lev}>
+                  1:{lev}
+                </option>
+              ))}
+            </select>
+          )}
           {hasMemberOverrides && (
             <span className="rounded bg-blue-950/50 px-2 py-0.5 text-xs text-blue-300">
               Size özel
@@ -243,6 +305,12 @@ export function TradePanel({ symbol, tick }: Props) {
       {tradingDisabled && marketStatus.open === false && isAdmin(user) === false && user?.verification?.canTrade !== false && (
         <p className="rounded-lg border border-input-border bg-input/80 px-3 py-2 text-xs text-muted">
           {marketStatus.reason ?? 'Piyasa şu an kapalı — işlem yapılamaz.'}
+        </p>
+      )}
+
+      {bistSellDisabled && (
+        <p className="rounded-lg border border-input-border bg-input/80 px-3 py-2 text-xs text-muted">
+          {BIST_SHORT_SELL_MESSAGE}
         </p>
       )}
 
@@ -335,7 +403,7 @@ export function TradePanel({ symbol, tick }: Props) {
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          disabled={!tick || tradingDisabled}
+          disabled={!tick || tradingDisabled || bistSellDisabled}
           onClick={() =>
             tab === 'market' ? runMarket('sell') : runLimit('sell')
           }
@@ -429,6 +497,20 @@ export function TradePanel({ symbol, tick }: Props) {
             </button>
           </div>
         )}
+        {(stops.useSl || stops.useTp) &&
+          slTpEntryPrice > 0 &&
+          slTpQuantity > 0 && (
+            <PositionStopPnl
+              position={openPos}
+              symbol={sym}
+              side={slTpSide}
+              quantity={slTpQuantity}
+              entryPrice={slTpEntryPrice}
+              stopLoss={stops.useSl ? stops.slPrice : null}
+              takeProfit={stops.useTp ? stops.tpPrice : null}
+              className="mt-1"
+            />
+          )}
         {stops.positionMode && (
           <button
             type="button"
@@ -493,7 +575,7 @@ export function TradePanel({ symbol, tick }: Props) {
         </div>
         <div className="min-w-0">
           <p className="text-muted">Kaldıraç</p>
-          <p className="font-mono text-foreground">1:{leverage}</p>
+          <p className="font-mono text-foreground">1:{activeLeverageValue}</p>
         </div>
         <div className="min-w-0">
           <p className="text-muted">Min. lot</p>

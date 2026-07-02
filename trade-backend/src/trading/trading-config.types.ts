@@ -1,7 +1,9 @@
 /** Müşteri / işlem motoru ayarları (başlangıç bakiyesi hariç). */
 export interface TradingSettingsPartial {
   commissionRate?: number;
-  /** 1 = kaldıraçsız, 100 = 1:100 */
+  /** İşletme: müşterinin seçebileceği kaldıraç listesi (örn. [1, 5, 10, 50]). */
+  leverageOptions?: number[];
+  /** Müşteri özel sabit kaldıraç veya eski tek değerli işletme ayarı (geriye uyum). */
   leverage?: number;
   minLot?: number;
   maxLot?: number | null;
@@ -24,7 +26,10 @@ export type BusinessSettingsPartial = TradingSettingsPartial &
 
 export interface EffectiveTradingSettings {
   commissionRate: number;
-  leverage: number;
+  /** Müşterinin seçebileceği kaldıraçlar (1 = kaldıraçsız). */
+  leverageOptions: number[];
+  /** Müşteri özel sabit kaldıraç; null ise müşteri işlemde seçer. */
+  fixedLeverage: number | null;
   minLot: number;
   maxLot: number | null;
   lotStep: number;
@@ -40,9 +45,12 @@ export interface BusinessEffectiveSettings extends EffectiveTradingSettings {
   initialBalance: number;
 }
 
+export const DEFAULT_LEVERAGE_OPTIONS = [1];
+
 export const DEFAULT_TRADING_SETTINGS: EffectiveTradingSettings = {
   commissionRate: 0.0002,
-  leverage: 1,
+  leverageOptions: [...DEFAULT_LEVERAGE_OPTIONS],
+  fixedLeverage: null,
   minLot: 0.01,
   maxLot: null,
   lotStep: 0.01,
@@ -66,7 +74,6 @@ export const TRADING_SETTINGS_FIELDS: {
   step?: string;
 }[] = [
   { key: 'commissionRate', label: 'Komisyon oranı', hint: '0.0002 = %0.02', step: '0.0001' },
-  { key: 'leverage', label: 'Kaldıraç', hint: '1 = kaldıraçsız, 100 = 1:100', step: '1' },
   { key: 'minLot', label: 'Min lot', step: '0.01' },
   { key: 'maxLot', label: 'Max lot', hint: 'Boş = limitsiz', step: '0.01' },
   { key: 'lotStep', label: 'Lot adımı', step: '0.01' },
@@ -93,11 +100,68 @@ export const BUSINESS_SETTINGS_FIELDS: {
   ...TRADING_SETTINGS_FIELDS,
 ];
 
+export function normalizeLeverageOptions(
+  options: number[] | undefined,
+  legacyLeverage?: number,
+): number[] {
+  let raw = options;
+  if ((!raw || raw.length === 0) && legacyLeverage != null && legacyLeverage >= 1) {
+    raw = [legacyLeverage];
+  }
+  if (!raw || raw.length === 0) return [...DEFAULT_LEVERAGE_OPTIONS];
+  const sorted = [
+    ...new Set(
+      raw.map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n >= 1),
+    ),
+  ].sort((a, b) => a - b);
+  return sorted.length > 0 ? sorted : [...DEFAULT_LEVERAGE_OPTIONS];
+}
+
+export function resolveLeverageConfig(
+  business: TradingSettingsPartial,
+  member?: TradingSettingsPartial | null,
+): Pick<EffectiveTradingSettings, 'leverageOptions' | 'fixedLeverage'> {
+  const memberFixed =
+    member?.leverage != null && member.leverage >= 1
+      ? Math.floor(member.leverage)
+      : null;
+
+  if (memberFixed != null) {
+    return { leverageOptions: [memberFixed], fixedLeverage: memberFixed };
+  }
+
+  return {
+    leverageOptions: normalizeLeverageOptions(
+      business.leverageOptions,
+      business.leverage,
+    ),
+    fixedLeverage: null,
+  };
+}
+
+export function validateOrderLeverage(
+  requested: number | undefined,
+  settings: EffectiveTradingSettings,
+): number {
+  if (settings.fixedLeverage != null) return settings.fixedLeverage;
+  const fallback = settings.leverageOptions[0] ?? 1;
+  const lev =
+    requested != null && Number.isFinite(requested)
+      ? Math.floor(requested)
+      : fallback;
+  if (!settings.leverageOptions.includes(lev)) {
+    throw new Error('Geçersiz kaldıraç');
+  }
+  return lev;
+}
+
 export function mergeTradingSettings(
-  ...layers: (TradingSettingsPartial | null | undefined)[]
+  businessLayer?: TradingSettingsPartial | null,
+  memberLayer?: TradingSettingsPartial | null,
 ): EffectiveTradingSettings {
   const merged: EffectiveTradingSettings = { ...DEFAULT_TRADING_SETTINGS };
-  for (const layer of layers) {
+
+  for (const layer of [businessLayer, memberLayer]) {
     if (!layer) continue;
     for (const { key } of TRADING_SETTINGS_FIELDS) {
       const value = layer[key];
@@ -111,7 +175,14 @@ export function mergeTradingSettings(
       }
     }
   }
-  if (merged.leverage < 1) merged.leverage = 1;
+
+  const leverage = resolveLeverageConfig(
+    businessLayer ?? {},
+    memberLayer,
+  );
+  merged.leverageOptions = leverage.leverageOptions;
+  merged.fixedLeverage = leverage.fixedLeverage;
+
   if (merged.minLot <= 0) merged.minLot = DEFAULT_TRADING_SETTINGS.minLot;
   if (merged.lotStep <= 0) merged.lotStep = DEFAULT_TRADING_SETTINGS.lotStep;
   if (merged.commissionRate < 0) merged.commissionRate = 0;
@@ -138,6 +209,24 @@ export function stripBusinessOnlySettings(
   return out;
 }
 
+function sanitizeLeverageOptionsInput(raw: unknown): number[] | undefined {
+  if (raw == null) return undefined;
+  let nums: number[];
+  if (Array.isArray(raw)) {
+    nums = raw.map((v) => Number(v));
+  } else if (typeof raw === 'string') {
+    nums = raw
+      .split(/[,;\s]+/)
+      .map((part) => part.trim())
+      .filter((part) => part !== '')
+      .map((part) => Number(part));
+  } else {
+    return undefined;
+  }
+  const normalized = normalizeLeverageOptions(nums);
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 export function sanitizeTradingSettingsInput(
   input: TradingSettingsPartial,
 ): TradingSettingsPartial {
@@ -158,6 +247,16 @@ export function sanitizeTradingSettingsInput(
     if (!Number.isFinite(n)) continue;
     out[key] = n;
   }
+
+  if (input.leverageOptions !== undefined) {
+    const opts = sanitizeLeverageOptionsInput(input.leverageOptions);
+    if (opts) out.leverageOptions = opts;
+  }
+  if (input.leverage !== undefined) {
+    const n = Number(input.leverage);
+    if (Number.isFinite(n) && n >= 1) out.leverage = Math.floor(n);
+  }
+
   return out;
 }
 
@@ -175,7 +274,9 @@ export function sanitizeBusinessSettingsInput(
 export function sanitizeMemberSettingsInput(
   input: TradingSettingsPartial,
 ): TradingSettingsPartial {
-  return sanitizeTradingSettingsInput(input);
+  const out = sanitizeTradingSettingsInput(input);
+  delete out.leverageOptions;
+  return out;
 }
 
 /** @deprecated use sanitizeBusinessSettingsInput or sanitizeMemberSettingsInput */
@@ -192,6 +293,13 @@ export function requiredMargin(
 ): number {
   const lev = Math.max(1, leverage);
   return (quantity * price) / lev;
+}
+
+export function positionLeverage(
+  position: { leverage?: number },
+  fallback = 1,
+): number {
+  return Math.max(1, position.leverage ?? fallback);
 }
 
 export function validateLot(
